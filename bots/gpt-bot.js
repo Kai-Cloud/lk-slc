@@ -104,6 +104,7 @@ async function main() {
 
   let currentUser = null;
   const processedMessages = new Set(); // 防止重复处理
+  const roomsMap = new Map(); // 存储房间信息 (roomId -> room)
 
   socket.on('connect', () => {
     console.log('✅ WebSocket 已连接\n');
@@ -150,7 +151,22 @@ async function main() {
     console.log(`\n📍 Bot ID: ${currentUser.id}`);
     console.log(`📍 用户名: ${currentUser.username}`);
     console.log(`\n💡 提示: 在聊天中使用 @${currentUser.username} 来提及我\n`);
-    console.log('等待用户提及...\n');
+    console.log('💡 私聊房间中可以直接对话，无需 @ 提及\n');
+    console.log('等待用户消息...\n');
+  });
+
+  socket.on('roomList', (rooms) => {
+    // 存储房间信息
+    rooms.forEach(room => {
+      roomsMap.set(room.id, room);
+    });
+    console.log(`📁 已加载 ${rooms.length} 个房间`);
+  });
+
+  socket.on('newRoom', (room) => {
+    // 新房间创建时更新
+    roomsMap.set(room.id, room);
+    console.log(`📁 新房间: ${room.name} (${room.type})`);
   });
 
   socket.on('loginError', (data) => {
@@ -177,30 +193,43 @@ async function main() {
       return;
     }
 
+    // 获取房间信息
+    const room = roomsMap.get(message.room_id);
+    const isPrivateChat = room && room.type === 'private';
+
     // 检查是否被提及
     const isMentioned = message.text.includes(`@${currentUser.username}`);
 
-    if (!isMentioned) {
+    // 私聊房间：响应所有消息；群聊房间：只响应 @ 提及
+    if (!isPrivateChat && !isMentioned) {
       return;
     }
 
-    // 提取用户问题（移除 @ 提及）
-    const userQuestion = message.text
-      .replace(new RegExp(`@${currentUser.username}:?`, 'g'), '')
-      .trim();
+    // 提取用户问题
+    let userQuestion;
+    if (isMentioned) {
+      // 如果有 @ 提及，移除 @ 部分
+      userQuestion = message.text
+        .replace(new RegExp(`@${currentUser.username}:?`, 'g'), '')
+        .trim();
+    } else {
+      // 私聊中没有 @ 提及，直接使用全部文本
+      userQuestion = message.text.trim();
+    }
 
     if (!userQuestion) {
       socket.emit('sendMessage', {
         roomId: message.room_id,
-        text: '你好！我是 GPT-4o 助手。使用 @' + currentUser.username + ' 问题 来提问吧！'
+        text: '你好！我是 GPT-4o 助手。' + (isPrivateChat ? '私聊中可以直接提问！' : '使用 @' + currentUser.username + ' 问题 来提问吧！')
       });
       return;
     }
 
     console.log('========================================');
-    console.log('📩 收到提及');
+    console.log(`📩 收到消息 (${isPrivateChat ? '私聊' : '群聊'})`);
     console.log('========================================');
     console.log(`👤 用户: ${message.display_name || message.username}`);
+    console.log(`🏠 房间: ${room ? room.name : message.room_id}`);
     console.log(`❓ 问题: ${userQuestion}`);
     console.log('');
 
