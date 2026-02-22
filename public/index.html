@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>简单局域网聊天 - 登录</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      padding: 40px;
+      width: 100%;
+      max-width: 400px;
+      animation: slideUp 0.5s ease;
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    h1 {
+      text-align: center;
+      color: #333;
+      margin-bottom: 10px;
+      font-size: 28px;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #666;
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      color: #555;
+      font-weight: 500;
+    }
+
+    input {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #e0e0e0;
+      border-radius: 10px;
+      font-size: 16px;
+      transition: border-color 0.3s;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    button {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .error {
+      background: #fee;
+      color: #c33;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-size: 14px;
+      display: none;
+    }
+
+    .error.show {
+      display: block;
+      animation: shake 0.4s;
+    }
+
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-10px); }
+      75% { transform: translateX(10px); }
+    }
+
+    .hint {
+      margin-top: 20px;
+      padding: 15px;
+      background: #f0f4ff;
+      border-radius: 10px;
+      font-size: 13px;
+      color: #555;
+      line-height: 1.6;
+    }
+
+    .hint strong {
+      color: #667eea;
+    }
+
+    .loading {
+      display: none;
+      text-align: center;
+      color: #667eea;
+      font-size: 14px;
+      margin-top: 10px;
+    }
+
+    .loading.show {
+      display: block;
+    }
+
+    @media (max-width: 480px) {
+      .container {
+        padding: 30px 20px;
+      }
+      h1 {
+        font-size: 24px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>💬 简单局域网聊天</h1>
+    <p class="subtitle">Simple LAN Chat</p>
+
+    <div class="error" id="error"></div>
+
+    <form id="loginForm">
+      <div class="form-group">
+        <label for="username">用户名</label>
+        <input
+          type="text"
+          id="username"
+          placeholder="输入用户名 (例如: alice, bob, gpt-bot)"
+          required
+          autocomplete="username"
+        >
+      </div>
+
+      <div class="form-group">
+        <label for="password">密码</label>
+        <input
+          type="password"
+          id="password"
+          placeholder="输入密码"
+          required
+          autocomplete="current-password"
+        >
+      </div>
+
+      <button type="submit" id="loginBtn">登录 / 注册</button>
+
+      <div class="loading" id="loading">正在连接...</div>
+    </form>
+
+    <div class="hint">
+      <strong>💡 提示:</strong><br>
+      • 首次登录会自动注册账号<br>
+      • 登录后自动加入"大厅"群聊<br>
+      • Bot 用户名建议以 "-bot" 结尾
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const form = document.getElementById('loginForm');
+    const usernameInput = document.getElementById('username');
+    const passwordInput = document.getElementById('password');
+    const loginBtn = document.getElementById('loginBtn');
+    const errorDiv = document.getElementById('error');
+    const loadingDiv = document.getElementById('loading');
+
+    // 检查是否有保存的 token
+    const savedToken = localStorage.getItem('chatToken');
+    if (savedToken) {
+      // 尝试自动登录
+      tryAutoLogin(savedToken);
+    }
+
+    // 表单提交
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const username = usernameInput.value.trim();
+      const password = passwordInput.value;
+
+      if (!username || !password) {
+        showError('请填写用户名和密码');
+        return;
+      }
+
+      loginBtn.disabled = true;
+      loadingDiv.classList.add('show');
+      errorDiv.classList.remove('show');
+
+      try {
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username,
+            password,
+            isBot: username.toLowerCase().includes('bot')
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          // 保存 token
+          localStorage.setItem('chatToken', data.token);
+          localStorage.setItem('chatUser', JSON.stringify(data.user));
+
+          // 跳转到聊天页面
+          window.location.href = '/chat.html';
+        } else {
+          showError(data.error || '登录失败');
+          loginBtn.disabled = false;
+          loadingDiv.classList.remove('show');
+        }
+      } catch (error) {
+        console.error('登录错误:', error);
+        showError('网络错误，请检查服务器是否运行');
+        loginBtn.disabled = false;
+        loadingDiv.classList.remove('show');
+      }
+    });
+
+    // 自动登录
+    function tryAutoLogin(token) {
+      loadingDiv.classList.add('show');
+      loginBtn.disabled = true;
+
+      fetch('/api/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success || data.user) {
+          window.location.href = '/chat.html';
+        } else {
+          localStorage.removeItem('chatToken');
+          localStorage.removeItem('chatUser');
+          loadingDiv.classList.remove('show');
+          loginBtn.disabled = false;
+        }
+      })
+      .catch(() => {
+        localStorage.removeItem('chatToken');
+        localStorage.removeItem('chatUser');
+        loadingDiv.classList.remove('show');
+        loginBtn.disabled = false;
+      });
+    }
+
+    // 显示错误
+    function showError(message) {
+      errorDiv.textContent = message;
+      errorDiv.classList.add('show');
+      setTimeout(() => {
+        errorDiv.classList.remove('show');
+      }, 5000);
+    }
+
+    // Enter 键登录
+    passwordInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        form.dispatchEvent(new Event('submit'));
+      }
+    });
+  </script>
+</body>
+</html>
