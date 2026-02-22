@@ -72,6 +72,16 @@ function initChat() {
 
   // 自动调整输入框高度
   messageInput.addEventListener('input', autoResizeTextarea);
+
+  // 移动端：点击侧边栏外部区域时收起侧边栏
+  document.addEventListener('click', (e) => {
+    if (window.innerWidth <= 768 && sidebar.classList.contains('show')) {
+      // 如果点击的不是侧边栏内部，也不是菜单按钮
+      if (!sidebar.contains(e.target) && !toggleSidebar.contains(e.target)) {
+        sidebar.classList.remove('show');
+      }
+    }
+  });
 }
 
 // 连接 Socket.io
@@ -269,6 +279,11 @@ function selectRoom(room) {
 
   // 重新渲染房间列表以应用 active 样式
   renderRoomList();
+
+  // 移动端：选择房间后自动收起侧边栏
+  if (window.innerWidth <= 768) {
+    sidebar.classList.remove('show');
+  }
 
   // 加载消息
   socket.emit('loadMessages', { roomId: room.id, limit: 50 });
