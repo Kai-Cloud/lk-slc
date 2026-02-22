@@ -94,7 +94,12 @@ async function main() {
 
   // 连接 Socket.io
   const socket = io(SERVER_URL, {
-    auth: { token }
+    auth: { token },
+    reconnection: true,           // 启用自动重连
+    reconnectionDelay: 1000,      // 首次重连延迟 1 秒
+    reconnectionDelayMax: 5000,   // 最大重连延迟 5 秒
+    reconnectionAttempts: Infinity, // 无限重连
+    timeout: 20000                // 连接超时 20 秒
   });
 
   let currentUser = null;
@@ -105,8 +110,36 @@ async function main() {
     socket.emit('loginWithToken', { token });
   });
 
-  socket.on('disconnect', () => {
-    console.log('❌ WebSocket 已断开连接');
+  socket.on('disconnect', (reason) => {
+    console.log(`❌ WebSocket 已断开: ${reason}`);
+    if (reason === 'io server disconnect') {
+      // 服务端主动断开，尝试重连
+      console.log('🔄 服务端断开连接，将自动重连...');
+      socket.connect();
+    }
+  });
+
+  socket.on('connect_error', (error) => {
+    console.error('❌ 连接错误:', error.message);
+  });
+
+  socket.on('reconnect', (attemptNumber) => {
+    console.log(`✅ 已重新连接 (尝试次数: ${attemptNumber})`);
+    console.log('🔄 正在重新登录...');
+    socket.emit('loginWithToken', { token });
+  });
+
+  socket.on('reconnect_attempt', (attemptNumber) => {
+    console.log(`🔄 正在尝试重连... (第 ${attemptNumber} 次)`);
+  });
+
+  socket.on('reconnect_error', (error) => {
+    console.error('❌ 重连失败:', error.message);
+  });
+
+  socket.on('reconnect_failed', () => {
+    console.error('❌ 重连失败：已达到最大尝试次数');
+    process.exit(1);
   });
 
   socket.on('loginSuccess', (data) => {
@@ -189,10 +222,13 @@ async function main() {
     console.error('❌ 错误:', data.message);
   });
 
-  // 定期获取在线用户（保持活跃）
+  // 心跳机制：定期发送 keepAlive 保持在线状态
   setInterval(() => {
-    socket.emit('getOnlineUsers');
-  }, 60000);
+    if (socket.connected && currentUser) {
+      socket.emit('keepAlive');
+      console.log('💓 发送心跳');
+    }
+  }, 30000); // 每 30 秒一次（服务端认为 5 分钟内活跃为在线）
 
   // 捕获退出信号
   process.on('SIGINT', () => {

@@ -286,6 +286,13 @@ io.on('connection', (socket) => {
     socket.emit('searchResults', results);
   });
 
+  // 心跳保活
+  socket.on('keepAlive', () => {
+    if (currentUser) {
+      userDb.updateLastSeen.run(currentUser.id);
+    }
+  });
+
   // 删除房间
   socket.on('deleteRoom', (data) => {
     if (!currentUser) {
