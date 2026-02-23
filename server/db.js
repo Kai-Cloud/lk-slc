@@ -117,6 +117,9 @@ const userDb = {
   // 更新最后在线时间
   updateLastSeen: db.prepare('UPDATE users SET last_seen = CURRENT_TIMESTAMP WHERE id = ?'),
 
+  // 更新密码
+  updatePassword: db.prepare('UPDATE users SET password_hash = ? WHERE id = ?'),
+
   // 获取所有用户
   getAll: db.prepare('SELECT id, username, display_name, is_bot, last_seen FROM users'),
 
@@ -246,6 +249,9 @@ const sessionDb = {
 
   // 删除会话
   delete: db.prepare('DELETE FROM sessions WHERE token = ?'),
+
+  // 删除指定用户的所有会话
+  deleteByUserId: db.prepare('DELETE FROM sessions WHERE user_id = ?'),
 
   // 删除过期会话
   deleteExpired: db.prepare(`

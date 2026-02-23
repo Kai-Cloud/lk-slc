@@ -5,7 +5,7 @@ const path = require('path');
 require('dotenv').config();
 
 const { initDatabase, userDb, roomDb, messageDb, getOrCreatePrivateRoom } = require('./db');
-const { authenticateUser, verifyToken } = require('./auth');
+const { authenticateUser, verifyToken, changePassword } = require('./auth');
 
 // 初始化数据库
 initDatabase();
@@ -377,6 +377,37 @@ app.post('/api/login', async (req, res) => {
     res.json(result);
   } else {
     res.status(401).json(result);
+  }
+});
+
+// 修改密码 API
+app.post('/api/change-password', async (req, res) => {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  const user = verifyToken(token);
+
+  if (!user) {
+    return res.status(401).json({
+      success: false,
+      error: '未授权，请先登录'
+    });
+  }
+
+  const { currentPassword, newPassword } = req.body;
+
+  // 验证必填参数
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({
+      success: false,
+      error: '请填写完整信息'
+    });
+  }
+
+  const result = await changePassword(user.id, currentPassword, newPassword);
+
+  if (result.success) {
+    res.json(result);
+  } else {
+    res.status(400).json(result);
   }
 });
 

@@ -118,6 +118,56 @@ function cleanupExpiredSessions() {
   }
 }
 
+// 修改密码
+async function changePassword(userId, currentPassword, newPassword) {
+  try {
+    // 验证必填参数
+    if (!userId || !currentPassword || !newPassword) {
+      return { success: false, error: '参数不完整' };
+    }
+
+    // 验证新密码长度
+    if (newPassword.length < 6) {
+      return { success: false, error: '新密码至少需要6位字符' };
+    }
+
+    // 查找用户
+    const user = userDb.findById.get(userId);
+    if (!user) {
+      return { success: false, error: '用户不存在' };
+    }
+
+    // 验证当前密码
+    const isValid = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!isValid) {
+      return { success: false, error: '当前密码错误' };
+    }
+
+    // 检查新密码是否与旧密码相同
+    const isSame = await bcrypt.compare(newPassword, user.password_hash);
+    if (isSame) {
+      return { success: false, error: '新密码不能与当前密码相同' };
+    }
+
+    // 生成新的密码哈希
+    const newPasswordHash = await bcrypt.hash(newPassword, 10);
+
+    // 更新密码
+    userDb.updatePassword.run(newPasswordHash, userId);
+
+    // 删除该用户的所有会话（强制重新登录）
+    sessionDb.deleteByUserId.run(userId);
+
+    console.log(`✅ 用户 ${user.username} (ID: ${userId}) 修改密码成功`);
+
+    return { success: true };
+
+  } catch (error) {
+    console.error('修改密码错误:', error);
+    return { success: false, error: '修改密码失败: ' + error.message };
+  }
+}
+
 // 定期清理过期会话（每小时一次）
 setInterval(cleanupExpiredSessions, 60 * 60 * 1000);
 
@@ -126,5 +176,6 @@ module.exports = {
   verifyToken,
   logout,
   cleanupExpiredSessions,
+  changePassword,
   JWT_SECRET
 };

@@ -24,6 +24,7 @@
           <div class="user-name" id="currentUserName">加载中...</div>
           <div class="user-status online">在线</div>
         </div>
+        <button class="btn-icon" id="settingsBtn" title="设置">⚙️</button>
       </div>
 
       <!-- 房间列表 -->
@@ -89,6 +90,35 @@
   <div class="connection-status" id="connectionStatus">
     <span class="status-dot"></span>
     <span class="status-text">连接中...</span>
+  </div>
+
+  <!-- 修改密码模态框 -->
+  <div class="modal" id="changePasswordModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>修改密码</h3>
+        <button class="modal-close" id="closePasswordModal">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="currentPassword">当前密码</label>
+          <input type="password" id="currentPassword" placeholder="输入当前密码" autocomplete="current-password">
+        </div>
+        <div class="form-group">
+          <label for="newPassword">新密码</label>
+          <input type="password" id="newPassword" placeholder="输入新密码（至少6位）" autocomplete="new-password">
+        </div>
+        <div class="form-group">
+          <label for="confirmPassword">确认新密码</label>
+          <input type="password" id="confirmPassword" placeholder="再次输入新密码" autocomplete="new-password">
+        </div>
+        <div class="error-message" id="passwordError"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="cancelPasswordChange">取消</button>
+        <button class="btn-primary" id="confirmPasswordChange">确认修改</button>
+      </div>
+    </div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>

@@ -24,6 +24,15 @@ const searchResults = document.getElementById('searchResults');
 const toggleSidebar = document.getElementById('toggleSidebar');
 const sidebar = document.getElementById('sidebar');
 const logoutBtn = document.getElementById('logoutBtn');
+const settingsBtn = document.getElementById('settingsBtn');
+const changePasswordModal = document.getElementById('changePasswordModal');
+const closePasswordModal = document.getElementById('closePasswordModal');
+const cancelPasswordChange = document.getElementById('cancelPasswordChange');
+const confirmPasswordChange = document.getElementById('confirmPasswordChange');
+const currentPasswordInput = document.getElementById('currentPassword');
+const newPasswordInput = document.getElementById('newPassword');
+const confirmPasswordInput = document.getElementById('confirmPassword');
+const passwordError = document.getElementById('passwordError');
 
 // 检查登录状态
 const token = localStorage.getItem('chatToken');
@@ -69,6 +78,10 @@ function initChat() {
     sidebar.classList.toggle('show');
   });
   logoutBtn.addEventListener('click', logout);
+  settingsBtn.addEventListener('click', showChangePasswordModal);
+  closePasswordModal.addEventListener('click', hideChangePasswordModal);
+  cancelPasswordChange.addEventListener('click', hideChangePasswordModal);
+  confirmPasswordChange.addEventListener('click', handleChangePassword);
 
   // 自动调整输入框高度
   messageInput.addEventListener('input', autoResizeTextarea);
@@ -663,5 +676,101 @@ function handleMessageInputKeydown(e) {
 document.addEventListener('click', (e) => {
   if (mentionDropdown && !messageInput.contains(e.target) && !mentionDropdown.contains(e.target)) {
     hideMentionSuggestions();
+  }
+});
+
+// 显示修改密码模态框
+function showChangePasswordModal() {
+  changePasswordModal.classList.add('show');
+  currentPasswordInput.value = '';
+  newPasswordInput.value = '';
+  confirmPasswordInput.value = '';
+  passwordError.textContent = '';
+  currentPasswordInput.focus();
+}
+
+// 隐藏修改密码模态框
+function hideChangePasswordModal() {
+  changePasswordModal.classList.remove('show');
+}
+
+// 处理修改密码
+async function handleChangePassword() {
+  const currentPassword = currentPasswordInput.value.trim();
+  const newPassword = newPasswordInput.value.trim();
+  const confirmPassword = confirmPasswordInput.value.trim();
+
+  // 验证输入
+  if (!currentPassword) {
+    passwordError.textContent = '请输入当前密码';
+    return;
+  }
+
+  if (!newPassword) {
+    passwordError.textContent = '请输入新密码';
+    return;
+  }
+
+  if (newPassword.length < 6) {
+    passwordError.textContent = '新密码至少需要6位字符';
+    return;
+  }
+
+  if (newPassword !== confirmPassword) {
+    passwordError.textContent = '两次输入的新密码不一致';
+    return;
+  }
+
+  if (currentPassword === newPassword) {
+    passwordError.textContent = '新密码不能与当前密码相同';
+    return;
+  }
+
+  // 禁用按钮防止重复提交
+  confirmPasswordChange.disabled = true;
+  confirmPasswordChange.textContent = '修改中...';
+  passwordError.textContent = '';
+
+  try {
+    const response = await fetch('/api/change-password', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        currentPassword,
+        newPassword
+      })
+    });
+
+    const result = await response.json();
+
+    if (result.success) {
+      alert('密码修改成功！请使用新密码重新登录');
+      logout();
+    } else {
+      passwordError.textContent = result.error || '密码修改失败';
+    }
+  } catch (error) {
+    console.error('修改密码失败:', error);
+    passwordError.textContent = '网络错误，请稍后重试';
+  } finally {
+    confirmPasswordChange.disabled = false;
+    confirmPasswordChange.textContent = '确认修改';
+  }
+}
+
+// 点击模态框外部关闭
+changePasswordModal.addEventListener('click', (e) => {
+  if (e.target === changePasswordModal) {
+    hideChangePasswordModal();
+  }
+});
+
+// ESC 键关闭模态框
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && changePasswordModal.classList.contains('show')) {
+    hideChangePasswordModal();
   }
 });
