@@ -1,5 +1,6 @@
 const io = require('socket.io-client');
 const axios = require('axios');
+const https = require('https');
 require('dotenv').config();
 
 // 配置
@@ -8,6 +9,13 @@ const BOT_USERNAME = process.env.BOT_USERNAME || 'gpt-bot';
 const BOT_PASSWORD = process.env.BOT_PASSWORD;
 const FOUNDRY_ENDPOINT = process.env.FOUNDRY_ENDPOINT;
 const FOUNDRY_API_KEY = process.env.FOUNDRY_API_KEY;
+const REJECT_UNAUTHORIZED = process.env.REJECT_UNAUTHORIZED !== 'false'; // 默认验证证书
+
+// 如果禁用证书验证，显示警告
+if (!REJECT_UNAUTHORIZED) {
+  console.warn('⚠️  警告: 已禁用 SSL 证书验证（REJECT_UNAUTHORIZED=false）');
+  console.warn('⚠️  这会降低安全性，仅用于开发/测试环境的自签名证书\n');
+}
 
 // 验证配置
 if (!BOT_PASSWORD) {
@@ -71,11 +79,18 @@ async function main() {
     console.log(`📡 正在登录服务器: ${SERVER_URL}`);
     console.log(`👤 Bot 用户名: ${BOT_USERNAME}\n`);
 
+    // 配置 axios，允许忽略自签名证书
+    const axiosConfig = {
+      httpsAgent: new https.Agent({
+        rejectUnauthorized: REJECT_UNAUTHORIZED
+      })
+    };
+
     const loginRes = await axios.post(`${SERVER_URL}/api/login`, {
       username: BOT_USERNAME,
       password: BOT_PASSWORD,
       isBot: true
-    });
+    }, axiosConfig);
 
     if (!loginRes.data.success) {
       throw new Error(loginRes.data.error || '登录失败');
@@ -103,7 +118,8 @@ async function main() {
     reconnectionDelay: 1000,      // 首次重连延迟 1 秒
     reconnectionDelayMax: 5000,   // 最大重连延迟 5 秒
     reconnectionAttempts: Infinity, // 无限重连
-    timeout: 20000                // 连接超时 20 秒
+    timeout: 20000,               // 连接超时 20 秒
+    rejectUnauthorized: REJECT_UNAUTHORIZED  // SSL 证书验证控制
   });
 
   let currentUser = null;
