@@ -160,6 +160,38 @@ nvm use 22
 node --version
 ```
 
+### Ubuntu 系统依赖
+
+**在 Ubuntu/Debian 上部署前,必须先安装构建工具:**
+
+```bash
+# 更新包索引
+sudo apt-get update
+
+# 安装编译工具和 Python (better-sqlite3 需要)
+sudo apt-get install -y build-essential python3
+
+# 验证安装
+gcc --version
+python3 --version
+```
+
+**说明**:
+- `build-essential` 包含 gcc, g++, make 等编译工具
+- `python3` 是 node-gyp 的依赖项
+- 这些工具用于编译 better-sqlite3 原生模块
+- 仅在首次安装时需要,后续运行不再依赖
+
+**故障排除**:
+如果遇到 `libnode.so.64: cannot open shared object file` 错误,说明构建工具未安装。按照上述步骤安装后,需要重新安装 npm 依赖:
+
+```bash
+cd ~/lk-slc
+rm -rf node_modules package-lock.json
+npm install  # 会自动编译 better-sqlite3
+npm start    # 启动服务器
+```
+
 ## 在新设备上部署
 
 ### 1. 克隆仓库
