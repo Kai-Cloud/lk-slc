@@ -403,16 +403,10 @@ sudo nano /etc/nginx/sites-available/simple-chat
 粘贴以下配置内容：
 
 ```nginx
-# 将 HTTP 重定向到 HTTPS（可选）
+# HTTPS 服务器（仅监听 63030 端口）
 server {
-    listen 63030;
-    server_name _;
-    return 301 https://$host:63030$request_uri;
-}
-
-# HTTPS 服务器
-server {
-    listen 63030 ssl;
+    listen 63030 ssl http2;
+    listen [::]:63030 ssl http2;
     server_name _;  # 如果有域名，改为域名
 
     # SSL 证书配置
@@ -453,8 +447,15 @@ server {
 }
 ```
 
+**重要说明**:
+- 本配置**仅使用 63030 端口**用于 HTTPS 访问
+- **不需要** 80 (HTTP) 或 443 (HTTPS) 端口
+- 如果系统中已有其他 Web 服务（如 Apache），不会产生冲突
+- 用户直接访问 `https://<服务器IP>:63030` 即可
+
 **配置说明**:
-- **端口 63030**: Nginx 监听公网端口（HTTPS）
+- **listen 63030 ssl http2**: 仅监听 63030 端口的 HTTPS 连接，启用 HTTP/2
+- **listen [::]:63030 ssl http2**: IPv6 支持
 - **proxy_pass http://localhost:3030**: 转发到本地聊天服务器
 - **Upgrade/Connection 头**: 支持 WebSocket 长连接（Socket.io 实时通信）
 - **SSL 证书路径**: `/etc/nginx/ssl/chat.crt` 和 `/etc/nginx/ssl/chat.key`
@@ -462,18 +463,33 @@ server {
 #### 步骤 4: 启用配置并重启 Nginx
 
 ```bash
+# 禁用默认站点（避免端口冲突，推荐）
+sudo rm /etc/nginx/sites-enabled/default
+
 # 创建符号链接启用站点
 sudo ln -s /etc/nginx/sites-available/simple-chat /etc/nginx/sites-enabled/
+
+# 验证启用的站点
+ls -l /etc/nginx/sites-enabled/
+# 应只显示: simple-chat -> /etc/nginx/sites-available/simple-chat
 
 # 测试配置文件语法
 sudo nginx -t
 # 应输出: syntax is ok, test is successful
 
-# 重新加载 Nginx
+# 启动 Nginx（如果之前停止了）
+sudo systemctl start nginx
+
+# 或重新加载配置（如果 Nginx 正在运行）
 sudo systemctl reload nginx
 
-# 或重启 Nginx
-sudo systemctl restart nginx
+# 检查运行状态
+sudo systemctl status nginx
+# 应显示: Active: active (running)
+
+# 验证监听端口
+sudo netstat -tlnp | grep nginx
+# 应只显示 63030 端口，不应有 80/443 端口
 ```
 
 #### 步骤 5: 配置防火墙
@@ -544,13 +560,53 @@ pm2 logs chat-server
 
 #### 故障排除
 
-**问题 1: 浏览器显示"连接不安全"**
+**问题 1: Nginx 启动失败（端口被占用）**
+- **错误信息**:
+  ```
+  nginx: [emerg] bind() to 0.0.0.0:80 failed (98: Address already in use)
+  nginx: [emerg] bind() to 0.0.0.0:443 failed (98: Address already in use)
+  ```
+- **原因**: 系统中已有其他服务（如 Apache）占用 80/443 端口，或 Nginx 配置文件监听了这些端口
+- **解决步骤**:
+  ```bash
+  # 1. 检查哪些进程占用 80/443 端口
+  sudo netstat -tlnp | grep ':80 '
+  sudo netstat -tlnp | grep ':443'
+  # 或使用 lsof
+  sudo lsof -i :80
+  sudo lsof -i :443
+
+  # 2. 如果是 Apache 占用（且不需要 Apache）
+  sudo systemctl stop apache2
+  sudo systemctl disable apache2
+
+  # 3. 如果是旧的 Nginx 进程
+  sudo systemctl stop nginx
+  sudo killall nginx
+
+  # 4. 禁用 Nginx 默认站点（避免监听 80/443）
+  sudo rm /etc/nginx/sites-enabled/default
+
+  # 5. 确保配置文件只监听 63030 端口
+  sudo nano /etc/nginx/sites-available/simple-chat
+  # 确认配置中只有 "listen 63030 ssl http2"，没有 80/443 端口
+
+  # 6. 测试并启动
+  sudo nginx -t
+  sudo systemctl start nginx
+
+  # 7. 验证端口监听
+  sudo netstat -tlnp | grep nginx
+  # 应只显示 63030 端口
+  ```
+
+**问题 2: 浏览器显示"连接不安全"**
 - **原因**: 自签名证书未被浏览器信任
 - **解决**:
   - 测试环境：点击「高级」→「继续访问」
   - 生产环境：使用 Let's Encrypt 证书
 
-**问题 2: WebSocket 连接失败 (net::ERR_CONNECTION_CLOSED)**
+**问题 3: WebSocket 连接失败 (net::ERR_CONNECTION_CLOSED)**
 - **检查 Nginx 配置**: 确保包含 `Upgrade` 和 `Connection` 头
 - **检查防火墙**: 确保 63030 端口已开放
 - **查看 Nginx 日志**:
@@ -558,7 +614,7 @@ pm2 logs chat-server
   sudo tail -f /var/log/nginx/chat_error.log
   ```
 
-**问题 3: 502 Bad Gateway**
+**问题 4: 502 Bad Gateway**
 - **原因**: Nginx 无法连接到后端服务器（3030 端口）
 - **解决**:
   ```bash
@@ -572,7 +628,7 @@ pm2 logs chat-server
   pm2 restart chat-server
   ```
 
-**问题 4: 证书过期**
+**问题 5: 证书过期**
 - 自签名证书 365 天后过期，需要重新生成：
   ```bash
   sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
