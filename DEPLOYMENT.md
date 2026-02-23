@@ -1,12 +1,172 @@
 # 部署指南
 
+## 系统要求
+
+### 硬件要求
+
+根据使用规模选择合适的硬件配置：
+
+#### 最低配置（1-10 人）
+- **CPU**: 单核 1.0 GHz 或更高
+- **内存**: 512 MB RAM
+- **存储**: 500 MB 可用空间
+- **网络**: 10 Mbps 带宽
+
+#### 推荐配置（10-50 人）
+- **CPU**: 双核 2.0 GHz 或更高
+- **内存**: 2 GB RAM
+- **存储**: 2 GB 可用空间（含消息历史）
+- **网络**: 50 Mbps 带宽
+
+#### 大型部署（50-200 人）
+- **CPU**: 四核 2.5 GHz 或更高
+- **内存**: 4 GB RAM
+- **存储**: 10 GB 可用空间
+- **网络**: 100 Mbps 带宽
+
+> **注意**: 如果启用 GPT-4o Bot，建议至少额外增加 512 MB 内存。
+
+### 支持的操作系统
+
+- **Windows**: Windows 10/11, Windows Server 2016+
+- **macOS**: macOS 10.15 (Catalina) 或更高
+- **Linux**: Ubuntu 18.04+, Debian 10+, CentOS 7+, RHEL 7+
+
+### 网络配置要求
+
+#### 端口要求
+
+| 端口 | 协议 | 用途 | 是否必需 |
+|------|------|------|----------|
+| 3030 | TCP | HTTP/WebSocket 服务 | 必需 |
+| 27017 | TCP | MongoDB（仅 Docker 部署） | 可选 |
+
+#### 防火墙配置
+
+**Windows 防火墙**:
+```powershell
+# 以管理员身份运行 PowerShell
+netsh advfirewall firewall add rule name="Simple Chat Server" dir=in action=allow protocol=TCP localport=3030
+```
+
+**Linux 防火墙 (ufw)**:
+```bash
+sudo ufw allow 3030/tcp
+sudo ufw reload
+```
+
+**Linux 防火墙 (firewalld)**:
+```bash
+sudo firewall-cmd --permanent --add-port=3030/tcp
+sudo firewall-cmd --reload
+```
+
+#### 网络带宽估算
+
+每个在线用户的平均带宽消耗：
+- **文字消息**: 约 1-5 KB/消息
+- **WebSocket 心跳**: 约 100 bytes/30秒
+- **在线状态同步**: 约 1 KB/分钟
+
+**示例**:
+- 10 人同时在线，轻度聊天（每分钟 10 条消息）: ~2-5 Kbps
+- 50 人同时在线，中度聊天（每分钟 50 条消息）: ~10-20 Kbps
+- 200 人同时在线，重度聊天（每分钟 200 条消息）: ~50-100 Kbps
+
+> **提示**: 局域网环境通常无需担心带宽问题，千兆网卡足以支持数百人使用。
+
+#### 局域网部署建议
+
+1. **静态 IP**: 建议为服务器分配静态 IP 地址，避免 IP 变化导致客户端无法连接
+   ```bash
+   # Windows - 在网络适配器设置中手动配置
+   # Linux - 编辑 /etc/network/interfaces 或使用 netplan
+   ```
+
+2. **路由器配置**:
+   - 确保路由器未启用 AP 隔离（无线客户端之间需要互通）
+   - 如果服务器在内网，确保路由器允许内网设备访问服务器端口
+
+3. **DNS 配置（可选）**:
+   - 可以在路由器或本地 DNS 服务器中为服务器配置域名
+   - 例如: `chat.local` → `192.168.1.100`
+
+### 依赖软件
+
+- **Node.js**: 版本 22.x 或更高（推荐最新 LTS）
+  - 下载地址: https://nodejs.org/
+  - 验证安装: `node --version`
+  - **注意**: Node.js 22+ 提供更好的性能和安全性，低于此版本可能导致兼容性问题
+
+- **npm**: 通常随 Node.js 一起安装
+  - 验证安装: `npm --version`
+
+- **Git** (可选，用于克隆仓库和版本管理):
+  - 下载地址: https://git-scm.com/
+  - 验证安装: `git --version`
+
+### 安装/升级 Node.js
+
+**Ubuntu/Debian**:
+```bash
+# 使用 NodeSource 安装 Node.js 22
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# 验证版本
+node --version  # 应显示 v22.x.x
+```
+
+**CentOS/RHEL**:
+```bash
+# 使用 NodeSource 安装 Node.js 22
+curl -fsSL https://rpm.nodesource.com/setup_22.x | sudo bash -
+sudo yum install -y nodejs
+
+# 验证版本
+node --version
+```
+
+**Windows**:
+- 下载 Node.js 22 LTS 安装包: https://nodejs.org/
+- 运行安装程序并重启终端
+
+**macOS**:
+```bash
+# 使用 Homebrew
+brew install node@22
+
+# 或安装最新版本
+brew install node
+
+# 验证版本
+node --version
+```
+
+**使用 nvm (推荐，适用于所有平台)**:
+```bash
+# 安装 nvm (Node Version Manager)
+# Linux/macOS:
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+
+# Windows: 下载 nvm-windows
+# https://github.com/coreybutler/nvm-windows/releases
+
+# 安装 Node.js 22
+nvm install 22
+nvm use 22
+
+# 验证版本
+node --version
+```
+
 ## 在新设备上部署
 
 ### 1. 克隆仓库
 
 ```bash
-git clone https://github.com/Kai-Cloud/lk.git
-cd lk
+git clone https://github.com/Kai-Cloud/lk-slc.git
+cd lk-slc
 ```
 
 ### 2. 安装依赖
@@ -110,14 +270,9 @@ pm2 startup
 pm2 save
 ```
 
-### Windows 防火墙配置
+### 防火墙配置
 
-如果局域网设备无法访问，需要开放端口：
-
-```powershell
-# 以管理员身份运行 PowerShell
-netsh advfirewall firewall add rule name="Simple Chat" dir=in action=allow protocol=TCP localport=3030
-```
+如果局域网设备无法访问，请参考上方"系统要求 → 网络配置要求 → 防火墙配置"部分。
 
 ### 数据备份
 
@@ -256,6 +411,6 @@ simple-lan-chat/
 
 ## 技术支持
 
-- GitHub Issues: https://github.com/Kai-Cloud/lk/issues
+- GitHub Issues: https://github.com/Kai-Cloud/lk-slc/issues
 - 查看详细文档: [README.md](README.md)
 - 快速开始: [QUICK_START.md](QUICK_START.md)

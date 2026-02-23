@@ -53,7 +53,8 @@ async function callGPT4o(userMessage) {
 
     return response.data.choices[0].message.content;
   } catch (error) {
-    console.error('❌ GPT-4o 调用失败:', error.response?.data || error.message);
+    const errorData = error.response ? error.response.data : null;
+    console.error('❌ GPT-4o 调用失败:', errorData || error.message);
     return '抱歉，我遇到了问题，暂时无法回答你的问题。';
   }
 }
@@ -84,7 +85,10 @@ async function main() {
     console.log('✅ 登录成功！\n');
 
   } catch (error) {
-    console.error('❌ 登录失败:', error.response?.data?.error || error.message);
+    const errorMessage = error.response && error.response.data && error.response.data.error
+      ? error.response.data.error
+      : error.message;
+    console.error('❌ 登录失败:', errorMessage);
     console.error('\n请检查:');
     console.error('  1. 服务器是否正在运行');
     console.error('  2. SERVER_URL 是否正确');

@@ -246,7 +246,10 @@ io.on('connection', (socket) => {
     // 如果对方在线，让对方也加入
     const targetSocketId = onlineUsers.get(targetUserId);
     if (targetSocketId) {
-      io.sockets.sockets.get(targetSocketId)?.join(room.id);
+      const targetSocket = io.sockets.sockets.get(targetSocketId);
+      if (targetSocket) {
+        targetSocket.join(room.id);
+      }
       // 通知对方有新房间
       io.to(targetSocketId).emit('newRoom', room);
     }
@@ -382,7 +385,8 @@ app.post('/api/login', async (req, res) => {
 
 // 修改密码 API
 app.post('/api/change-password', async (req, res) => {
-  const token = req.headers.authorization?.replace('Bearer ', '');
+  const authHeader = req.headers.authorization;
+  const token = authHeader ? authHeader.replace('Bearer ', '') : '';
   const user = verifyToken(token);
 
   if (!user) {
@@ -412,7 +416,8 @@ app.post('/api/change-password', async (req, res) => {
 });
 
 app.get('/api/rooms', (req, res) => {
-  const token = req.headers.authorization?.replace('Bearer ', '');
+  const authHeader = req.headers.authorization;
+  const token = authHeader ? authHeader.replace('Bearer ', '') : '';
   const user = verifyToken(token);
 
   if (!user) {
@@ -424,7 +429,8 @@ app.get('/api/rooms', (req, res) => {
 });
 
 app.get('/api/messages/:roomId', (req, res) => {
-  const token = req.headers.authorization?.replace('Bearer ', '');
+  const authHeader = req.headers.authorization;
+  const token = authHeader ? authHeader.replace('Bearer ', '') : '';
   const user = verifyToken(token);
 
   if (!user) {
