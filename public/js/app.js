@@ -322,7 +322,18 @@ function sendMessage() {
 
   messageInput.value = '';
   autoResizeTextarea();
-  messageInput.focus();
+
+  // 移动端：发送消息后重置视窗缩放
+  if (window.innerWidth <= 768) {
+    messageInput.blur(); // 先失去焦点
+    setTimeout(() => {
+      // 强制重置 viewport
+      const viewport = document.querySelector('meta[name="viewport"]');
+      viewport.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
+    }, 100);
+  } else {
+    messageInput.focus();
+  }
 }
 
 // 添加消息到列表
@@ -430,6 +441,16 @@ function updateConnectionStatus(status) {
     statusText.textContent = '已断开';
   } else {
     statusText.textContent = '连接中...';
+  }
+
+  // 显示状态提示
+  connectionStatus.classList.add('show');
+
+  // 3秒后自动隐藏（仅在已连接状态）
+  if (status === 'connected') {
+    setTimeout(() => {
+      connectionStatus.classList.remove('show');
+    }, 3000);
   }
 }
 

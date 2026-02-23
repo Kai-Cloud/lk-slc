@@ -511,6 +511,20 @@ body {
   gap: 8px;
   font-size: 13px;
   z-index: 1000;
+  opacity: 0;
+  transform: translateY(-10px);
+  transition: opacity 0.3s, transform 0.3s;
+  pointer-events: none;
+}
+
+.connection-status.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.connection-status.disconnected {
+  opacity: 1 !important;
+  transform: translateY(0) !important;
 }
 
 .status-dot {
