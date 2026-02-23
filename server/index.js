@@ -363,6 +363,14 @@ io.on('connection', (socket) => {
 app.post('/api/login', async (req, res) => {
   const { username, password, isBot } = req.body;
 
+  // 验证必填参数
+  if (!username || !password) {
+    return res.status(400).json({
+      success: false,
+      error: '用户名和密码不能为空'
+    });
+  }
+
   const result = await authenticateUser(username, password, isBot);
 
   if (result.success) {

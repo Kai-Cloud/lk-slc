@@ -9,6 +9,11 @@ const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('he
 // 注册或登录用户
 async function authenticateUser(username, password, isBot = false) {
   try {
+    // 验证必填参数
+    if (!username || !password) {
+      return { success: false, error: '用户名和密码不能为空' };
+    }
+
     // 查找用户
     let user = userDb.findByUsername.get(username);
 
