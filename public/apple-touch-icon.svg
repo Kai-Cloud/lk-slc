@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180">
+  <defs>
+    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- 背景圆角矩形 -->
+  <rect width="180" height="180" rx="36" fill="url(#gradient)"/>
+
+  <!-- 主聊天气泡 -->
+  <path d="M 45 63 Q 45 45 63 45 L 117 45 Q 135 45 135 63 L 135 90 Q 135 108 117 108 L 81 108 L 63 126 L 63 108 Q 45 108 45 90 Z"
+        fill="white" opacity="0.95"/>
+
+  <!-- 小聊天气泡 -->
+  <path d="M 99 117 Q 99 108 108 108 L 135 108 Q 144 108 144 117 L 144 129.6 Q 144 138.6 135 138.6 L 120.6 138.6 L 111.6 147.6 L 111.6 138.6 Q 99 138.6 99 129.6 Z"
+        fill="white" opacity="0.7"/>
+
+  <!-- 消息气泡内的短线（表示文字） -->
+  <line x1="63" y1="68.4" x2="99" y2="68.4" stroke="url(#gradient)" stroke-width="5.4" stroke-linecap="round"/>
+  <line x1="63" y1="81" x2="117" y2="81" stroke="url(#gradient)" stroke-width="5.4" stroke-linecap="round"/>
+  <line x1="63" y1="93.6" x2="90" y2="93.6" stroke="url(#gradient)" stroke-width="5.4" stroke-linecap="round"/>
+</svg>
