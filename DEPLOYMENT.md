@@ -320,6 +320,312 @@ copy data\chat.db backups\chat-%date%.db
 cp data/chat.db backups/chat-$(date +%Y%m%d).db
 ```
 
+### HTTPS 部署（Nginx 反向代理）
+
+如果需要通过 HTTPS 在公网访问聊天服务器，可以使用 Nginx 作为反向代理。以下以 Ubuntu 系统为例，使用 Nginx 监听 **63030 端口（HTTPS）** 并代理到本机 **3030 端口（HTTP）**。
+
+#### 前置条件
+
+- 已按照前述步骤安装并启动聊天服务器（运行在 `http://localhost:3030`）
+- 服务器有公网 IP 地址或域名
+- 已开放防火墙端口 63030
+
+#### 步骤 1: 安装 Nginx
+
+```bash
+# 更新包索引
+sudo apt-get update
+
+# 安装 Nginx
+sudo apt-get install -y nginx
+
+# 验证安装
+nginx -v
+# 应输出: nginx version: nginx/x.x.x
+
+# 启动 Nginx
+sudo systemctl start nginx
+sudo systemctl enable nginx
+
+# 检查状态
+sudo systemctl status nginx
+```
+
+#### 步骤 2: 创建自签名 SSL 证书
+
+**注意**: 自签名证书会在浏览器中显示安全警告。生产环境建议使用 Let's Encrypt 等免费证书颁发机构。
+
+```bash
+# 创建证书存放目录
+sudo mkdir -p /etc/nginx/ssl
+
+# 生成自签名证书（有效期 365 天）
+sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout /etc/nginx/ssl/chat.key \
+  -out /etc/nginx/ssl/chat.crt
+
+# 在交互式提示中输入信息（示例）：
+# Country Name: CN
+# State or Province Name: Beijing
+# Locality Name: Beijing
+# Organization Name: My Company
+# Organizational Unit Name: IT
+# Common Name: your-server-ip-or-domain.com  # 重要: 填写服务器 IP 或域名
+# Email Address: admin@example.com
+
+# 设置证书文件权限
+sudo chmod 600 /etc/nginx/ssl/chat.key
+sudo chmod 644 /etc/nginx/ssl/chat.crt
+
+# 验证证书
+sudo openssl x509 -in /etc/nginx/ssl/chat.crt -text -noout | grep "Subject:"
+```
+
+**使用 Let's Encrypt 免费证书（可选，推荐生产环境）**:
+```bash
+# 安装 Certbot
+sudo apt-get install -y certbot python3-certbot-nginx
+
+# 获取证书（需要域名）
+sudo certbot --nginx -d your-domain.com
+
+# 证书会自动配置到 Nginx 并自动续期
+```
+
+#### 步骤 3: 配置 Nginx 反向代理
+
+创建 Nginx 配置文件：
+
+```bash
+sudo nano /etc/nginx/sites-available/simple-chat
+```
+
+粘贴以下配置内容：
+
+```nginx
+# 将 HTTP 重定向到 HTTPS（可选）
+server {
+    listen 63030;
+    server_name _;
+    return 301 https://$host:63030$request_uri;
+}
+
+# HTTPS 服务器
+server {
+    listen 63030 ssl;
+    server_name _;  # 如果有域名，改为域名
+
+    # SSL 证书配置
+    ssl_certificate /etc/nginx/ssl/chat.crt;
+    ssl_certificate_key /etc/nginx/ssl/chat.key;
+
+    # SSL 安全配置
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384';
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+
+    # 日志
+    access_log /var/log/nginx/chat_access.log;
+    error_log /var/log/nginx/chat_error.log;
+
+    # 反向代理配置
+    location / {
+        proxy_pass http://localhost:3030;
+        proxy_http_version 1.1;
+
+        # 传递客户端真实 IP
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # WebSocket 支持（Socket.io 必需）
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        # 超时设置
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+}
+```
+
+**配置说明**:
+- **端口 63030**: Nginx 监听公网端口（HTTPS）
+- **proxy_pass http://localhost:3030**: 转发到本地聊天服务器
+- **Upgrade/Connection 头**: 支持 WebSocket 长连接（Socket.io 实时通信）
+- **SSL 证书路径**: `/etc/nginx/ssl/chat.crt` 和 `/etc/nginx/ssl/chat.key`
+
+#### 步骤 4: 启用配置并重启 Nginx
+
+```bash
+# 创建符号链接启用站点
+sudo ln -s /etc/nginx/sites-available/simple-chat /etc/nginx/sites-enabled/
+
+# 测试配置文件语法
+sudo nginx -t
+# 应输出: syntax is ok, test is successful
+
+# 重新加载 Nginx
+sudo systemctl reload nginx
+
+# 或重启 Nginx
+sudo systemctl restart nginx
+```
+
+#### 步骤 5: 配置防火墙
+
+**Ubuntu 防火墙 (ufw)**:
+```bash
+# 允许 63030 端口（HTTPS）
+sudo ufw allow 63030/tcp
+
+# 如果需要禁用原来的 3030 端口公网访问（提高安全性）
+sudo ufw deny 3030/tcp
+
+# 重新加载防火墙
+sudo ufw reload
+
+# 查看规则
+sudo ufw status
+```
+
+**Azure/云服务商网络安全组（NSG）**:
+- 在云服务控制台添加入站规则：
+  - 端口: **63030**
+  - 协议: **TCP**
+  - 源: **Any**（或限制特定 IP）
+  - 操作: **允许**
+- 可选：移除 3030 端口的公网访问规则（仅允许本地访问）
+
+#### 步骤 6: 测试 HTTPS 访问
+
+1. **获取服务器公网 IP**:
+   ```bash
+   curl ifconfig.me
+   # 输出: 123.45.67.89
+   ```
+
+2. **浏览器访问**:
+   - URL: `https://123.45.67.89:63030`
+   - 如果使用自签名证书，浏览器会显示安全警告，点击「高级」→「继续访问」即可
+
+3. **验证 WebSocket 连接**:
+   - 打开浏览器开发者工具（F12）→ Network 标签
+   - 筛选 WS（WebSocket）
+   - 应该看到 `wss://your-ip:63030/socket.io/?...` 连接成功
+
+4. **测试功能**:
+   - 注册/登录用户
+   - 发送消息
+   - 检查实时通信是否正常
+
+#### 步骤 7: 使用 PM2 后台运行服务器
+
+确保聊天服务器后台运行，避免 SSH 断开后停止：
+
+```bash
+# 安装 PM2
+npm install -g pm2
+
+# 启动服务器
+pm2 start server/index.js --name chat-server
+
+# 设置开机自启
+pm2 startup
+pm2 save
+
+# 查看日志
+pm2 logs chat-server
+```
+
+#### 故障排除
+
+**问题 1: 浏览器显示"连接不安全"**
+- **原因**: 自签名证书未被浏览器信任
+- **解决**:
+  - 测试环境：点击「高级」→「继续访问」
+  - 生产环境：使用 Let's Encrypt 证书
+
+**问题 2: WebSocket 连接失败 (net::ERR_CONNECTION_CLOSED)**
+- **检查 Nginx 配置**: 确保包含 `Upgrade` 和 `Connection` 头
+- **检查防火墙**: 确保 63030 端口已开放
+- **查看 Nginx 日志**:
+  ```bash
+  sudo tail -f /var/log/nginx/chat_error.log
+  ```
+
+**问题 3: 502 Bad Gateway**
+- **原因**: Nginx 无法连接到后端服务器（3030 端口）
+- **解决**:
+  ```bash
+  # 检查聊天服务器是否运行
+  pm2 status
+
+  # 检查 3030 端口是否监听
+  sudo netstat -tlnp | grep 3030
+
+  # 重启服务器
+  pm2 restart chat-server
+  ```
+
+**问题 4: 证书过期**
+- 自签名证书 365 天后过期，需要重新生成：
+  ```bash
+  sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+    -keyout /etc/nginx/ssl/chat.key \
+    -out /etc/nginx/ssl/chat.crt
+  sudo systemctl reload nginx
+  ```
+
+#### 高级配置: 使用域名
+
+如果你有域名（例如 `chat.example.com`）：
+
+1. **DNS 配置**: 添加 A 记录指向服务器 IP
+   ```
+   chat.example.com  A  123.45.67.89
+   ```
+
+2. **修改 Nginx 配置**:
+   ```nginx
+   server {
+       listen 443 ssl;  # 使用标准 HTTPS 端口
+       server_name chat.example.com;
+
+       # 其他配置同上...
+   }
+   ```
+
+3. **获取 Let's Encrypt 证书**:
+   ```bash
+   sudo certbot --nginx -d chat.example.com
+   ```
+
+4. **访问**: `https://chat.example.com`
+
+#### 安全建议
+
+1. **禁用 HTTP 公网访问**: 只开放 HTTPS（63030 或 443），关闭 HTTP（3030）的公网访问
+2. **使用真实证书**: 生产环境使用 Let's Encrypt 或商业 SSL 证书
+3. **限制访问 IP**: 如果只有特定 IP 访问，在 Nginx 中配置白名单
+   ```nginx
+   location / {
+       allow 192.168.1.0/24;  # 允许局域网
+       allow 123.45.67.89;    # 允许特定公网 IP
+       deny all;              # 拒绝其他
+       proxy_pass http://localhost:3030;
+   }
+   ```
+4. **启用 HTTP/2**: 提升性能
+   ```nginx
+   listen 63030 ssl http2;
+   ```
+5. **定期更新证书**: 使用 Certbot 自动续期
+
 ## 更新代码
 
 在已部署的设备上更新：
