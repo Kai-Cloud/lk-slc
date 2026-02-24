@@ -161,7 +161,7 @@ function connectSocket() {
     }
 
     // 更新房间预览
-    updateRoomPreview(message.room_id, message.text);
+    updateRoomPreview(message.room_id, message.text, message.username, message.display_name);
   });
 
   socket.on('messages', (data) => {
@@ -461,7 +461,18 @@ function appendMessage(message) {
 }
 
 // 更新房间预览
-function updateRoomPreview(roomId, text) {
+function updateRoomPreview(roomId, text, username, displayName) {
+  // 更新 rooms 数组中的 lastMessage
+  const room = rooms.find(r => r.id === roomId);
+  if (room) {
+    room.lastMessage = {
+      text: text,
+      username: username,
+      display_name: displayName
+    };
+  }
+
+  // 更新 DOM 中的预览元素
   const previewEl = document.getElementById(`room-preview-${roomId}`);
   if (previewEl) {
     previewEl.textContent = text.substring(0, 30) + (text.length > 30 ? '...' : '');

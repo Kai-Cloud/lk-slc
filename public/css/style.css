@@ -164,11 +164,6 @@ body {
   color: #222 !important;
 }
 
-.room-item.has-unread .room-item-preview {
-  font-weight: 600 !important;
-  color: #555 !important;
-}
-
 .room-item-content {
   flex: 1;
   min-width: 0;
