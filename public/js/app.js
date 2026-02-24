@@ -269,12 +269,21 @@ function renderRoomList() {
   roomList.innerHTML = rooms.map(room => {
     const isActive = room.id === currentRoom?.id;
     const unreadCount = unreadCounts[room.id] || 0;
-    const hasUnread = unreadCount > 0 && !isActive;
+    const hasUnread = unreadCount > 0; // 移除 !isActive 条件
+
+    // 获取房间显示名称
+    let displayName = room.name;
+    if (room.type === 'private' && room.members) {
+      const otherMember = room.members.find(m => m.id !== currentUser?.id);
+      if (otherMember) {
+        displayName = otherMember.display_name || otherMember.username;
+      }
+    }
 
     return `
       <div class="room-item ${isActive ? 'active' : ''} ${hasUnread ? 'has-unread' : ''}" data-room-id="${room.id}">
         <div class="room-item-content">
-          <div class="room-item-title">${escapeHtml(room.name)}</div>
+          <div class="room-item-title">${escapeHtml(displayName)}</div>
           <div class="room-item-preview" id="room-preview-${room.id}">
             ${room.lastMessage ? escapeHtml(room.lastMessage.text.substring(0, 30)) : '开始聊天...'}
           </div>

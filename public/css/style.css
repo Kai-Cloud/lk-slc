@@ -160,13 +160,13 @@ body {
 
 /* 有未读消息的房间样式 */
 .room-item.has-unread .room-item-title {
-  font-weight: 700;
-  color: #222;
+  font-weight: 700 !important;
+  color: #222 !important;
 }
 
 .room-item.has-unread .room-item-preview {
-  font-weight: 600;
-  color: #555;
+  font-weight: 600 !important;
+  color: #555 !important;
 }
 
 .room-item-content {
