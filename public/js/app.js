@@ -381,6 +381,21 @@ function clearCurrentRoomUnread() {
 
 // 创建私聊
 function createPrivateChat(targetUserId) {
+  // 先检查是否已有该用户的私聊房间
+  const existingRoom = rooms.find(r =>
+    r.type === 'private' &&
+    r.members &&
+    r.members.some(m => m.id === targetUserId)
+  );
+
+  if (existingRoom) {
+    // 直接选中已存在的房间，不创建重复房间
+    console.log(`已存在与用户 ${targetUserId} 的私聊房间，直接选中`);
+    selectRoom(existingRoom);
+    return;
+  }
+
+  // 不存在才创建新房间
   socket.emit('createPrivateChat', { targetUserId });
 }
 

@@ -260,8 +260,67 @@ io.on('connection', (socket) => {
     // 广播到房间
     io.to(roomId).emit('message', message);
 
-    // 为该房间的其他成员增加未读计数
+    // 获取当前房间成员
     const members = roomDb.getMembers.all(roomId);
+    const memberIds = new Set(members.map(m => m.id));
+
+    // 如果是私聊房间，检查是否需要重新添加已删除的成员
+    if (room.type === 'private') {
+      const match = roomId.match(/^private_(\d+)_(\d+)$/);
+      if (match) {
+        const [_, id1Str, id2Str] = match;
+        const expectedUserIds = [parseInt(id1Str), parseInt(id2Str)];
+
+        // 找出应该在房间但不在成员列表中的用户（说明被删除了）
+        expectedUserIds.forEach(userId => {
+          if (!memberIds.has(userId) && userId !== currentUser.id) {
+            // 重新添加成员
+            roomDb.addMember.run(roomId, userId);
+            console.log(`🔄 自动重新添加用户 ${userId} 到私聊房间 ${roomId}`);
+
+            // 增加未读计数
+            unreadDb.incrementUnreadCount.run(userId, roomId, messageId);
+
+            // 如果用户在线，推送新房间和未读计数通知
+            const targetSocketId = onlineUsers.get(userId);
+            if (targetSocketId) {
+              const targetSocket = io.sockets.sockets.get(targetSocketId);
+              if (targetSocket) {
+                targetSocket.join(roomId);
+              }
+
+              // 重新获取完整的房间信息（包含更新后的成员列表）
+              const updatedRoom = roomDb.findById.get(roomId);
+              const roomWithDetails = {
+                ...updatedRoom,
+                members: roomDb.getMembers.all(roomId),
+                lastMessage: message,
+                unreadCount: 1
+              };
+
+              // 推送新房间通知
+              io.to(targetSocketId).emit('newRoom', roomWithDetails);
+
+              // 推送未读计数
+              io.to(targetSocketId).emit('unreadCountUpdate', {
+                roomId: roomId,
+                count: 1
+              });
+
+              // 推送总未读数
+              const totalUnread = unreadDb.getTotalUnreadCount.get(userId);
+              io.to(targetSocketId).emit('totalUnreadCount', {
+                total: totalUnread?.total || 0
+              });
+
+              console.log(`📩 已通知用户 ${userId} 新的私聊消息`);
+            }
+          }
+        });
+      }
+    }
+
+    // 为现有成员增加未读计数（排除发送者和刚重新添加的成员）
     members.forEach(member => {
       if (member.id !== currentUser.id) {
         // 增加未读计数
@@ -402,20 +461,20 @@ io.on('connection', (socket) => {
     // 通知当前用户删除成功
     socket.emit('roomDeleted', { roomId });
 
-    // 检查房间是否还有其他成员
-    const remainingMembers = roomDb.getRoomMembers.all(roomId);
-
-    // 如果房间没有成员了，且是私聊房间，可以删除房间和消息（可选）
-    if (remainingMembers.length === 0 && room.type === 'private') {
-      // 删除房间消息（可选，如果想保留历史记录可以注释掉）
-      // messageDb.deleteByRoom.run(roomId);
-
-      // 删除房间
-      roomDb.delete.run(roomId);
-
-      console.log(`🗑️ 房间已删除: ${room.name} (ID: ${roomId})`);
+    // 私聊房间：只移除成员关系，不删除房间本身（保留历史消息）
+    if (room.type === 'private') {
+      console.log(`👋 用户 ${currentUser.username} 删除了私聊房间 ${roomId}（房间保留，可通过消息重新激活）`);
     } else {
-      console.log(`👋 用户离开房间: ${currentUser.username} 离开 ${room.name}`);
+      // 群聊房间：检查是否还有其他成员
+      const remainingMembers = roomDb.getRoomMembers.all(roomId);
+
+      // 如果群聊房间没有成员了，删除房间
+      if (remainingMembers.length === 0) {
+        roomDb.delete.run(roomId);
+        console.log(`🗑️ 群聊房间已删除: ${room.name} (ID: ${roomId})`);
+      } else {
+        console.log(`👋 用户 ${currentUser.username} 离开群聊房间: ${room.name}`);
+      }
     }
   });
 
