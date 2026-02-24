@@ -720,6 +720,15 @@ body {
   color: #888;
 }
 
+/* @ Mention highlighting in messages */
+.message-bubble .mention {
+  color: #667eea;
+  font-weight: 600;
+  background: rgba(102, 126, 234, 0.1);
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
 /* 模态框 */
 .modal {
   display: none;

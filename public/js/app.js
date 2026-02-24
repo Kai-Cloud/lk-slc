@@ -532,6 +532,9 @@ function appendMessage(message) {
   const messageDiv = document.createElement('div');
   messageDiv.className = `message ${isOwn ? 'own' : ''} ${isBot ? 'bot' : ''}`;
 
+  // Process message text: escape HTML first, then highlight mentions
+  const processedText = highlightMentions(escapeHtml(message.text));
+
   messageDiv.innerHTML = `
     <div class="message-avatar">${isBot ? '🤖' : '👤'}</div>
     <div class="message-content">
@@ -541,7 +544,7 @@ function appendMessage(message) {
           <span class="message-time">${formatTime(message.created_at)}</span>
         </div>
       ` : ''}
-      <div class="message-bubble">${escapeHtml(message.text)}</div>
+      <div class="message-bubble">${processedText}</div>
       ${isOwn ? `
         <div class="message-header">
           <span class="message-time">${formatTime(message.created_at)}</span>
@@ -679,6 +682,12 @@ function escapeRegex(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+// Highlight @mentions in message text
+function highlightMentions(text) {
+  // Match @username pattern (username can contain letters, numbers, hyphens, underscores, and Chinese characters)
+  return text.replace(/@([\w\u4e00-\u9fa5_-]+)/g, '<span class="mention">@$1</span>');
+}
+
 function formatTime(timestamp) {
   const date = new Date(timestamp);
   const now = new Date();
@@ -741,13 +750,33 @@ function handleMessageInput(e) {
 }
 
 function showMentionSuggestions() {
-  // 获取当前房间的成员
-  const roomMembers = currentRoom?.members || [];
+  // 获取可 @ 的用户列表
+  let availableUsers = [];
 
-  // 过滤用户列表：只显示当前房间的成员
-  const suggestions = roomMembers
+  if (!currentRoom) {
+    return; // No room selected
+  }
+
+  // 如果是大厅（lobby），显示所有在线用户
+  if (currentRoom.id === 'lobby') {
+    availableUsers = onlineUsers.filter(u => u.id !== currentUser.id);
+  }
+  // 如果是私聊房间，只显示房间成员（对方用户）
+  else if (currentRoom.type === 'private' && currentRoom.members) {
+    availableUsers = currentRoom.members.filter(u => u.id !== currentUser.id);
+  }
+  // 如果是群聊房间，显示房间成员
+  else if (currentRoom.members) {
+    availableUsers = currentRoom.members.filter(u => u.id !== currentUser.id);
+  }
+  // 兜底：如果没有 members 字段，显示所有在线用户
+  else {
+    availableUsers = onlineUsers.filter(u => u.id !== currentUser.id);
+  }
+
+  // 过滤和搜索用户
+  const suggestions = availableUsers
     .filter(u => {
-      if (u.id === currentUser.id) return false;
       const username = (u.username || '').toLowerCase();
       const displayName = (u.display_name || '').toLowerCase();
       return username.includes(mentionQuery) || displayName.includes(mentionQuery);
