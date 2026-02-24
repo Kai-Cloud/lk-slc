@@ -21,33 +21,60 @@
 - **数据库**: SQLite (零配置,文件存储)
 - **实时通信**: Socket.io (WebSocket + 降级支持)
 
-## 🚀 快速开始
+## 🚀 快速开始 (Ubuntu 推荐)
 
-### 1. 安装依赖
+### 前置条件
+
+**Ubuntu/Debian 系统需先安装构建工具:**
 
 ```bash
-cd simple-lan-chat
+# 更新包索引
+sudo apt-get update
+
+# 安装 Node.js 22、编译工具和 Python
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt-get install -y nodejs build-essential python3
+
+# 验证安装
+node --version  # 应显示 v22.x.x
+gcc --version
+python3 --version
+```
+
+### 1. 克隆仓库
+
+```bash
+git clone https://github.com/Kai-Cloud/lk-slc.git
+cd lk-slc
+```
+
+### 2. 安装依赖
+
+```bash
 npm install
 ```
 
-### 2. 启动服务器
+### 3. 启动服务器
 
 ```bash
+# 开发模式（自动重启）
+npm run dev
+
+# 或生产模式
 npm start
 ```
 
 服务器会在 `http://localhost:3030` 启动
 
-### 3. 访问客户端
+### 4. 访问应用
 
-打开浏览器访问: `http://localhost:3030`
+- **本地**: http://localhost:3030
+- **局域网**: http://YOUR_IP:3030 (使用 `ip addr` 查看 IP 地址)
 
-或局域网内其他设备访问: `http://服务器IP:3030`
-
-### 4. 首次登录
+### 5. 首次登录
 
 1. 输入用户名（例如: `alice`, `bob`, `gpt-bot`）
-2. 设置密码（首次登录时注册）
+2. 设置密码（首次登录时自动注册）
 3. 自动进入"大厅"群聊
 
 ## 📱 移动端支持
@@ -76,11 +103,41 @@ http://服务器IP:3030/?token=自动生成的令牌
 
 ## 🤖 Bot 集成
 
-### 方式 1: 作为普通用户登录
+### 配置 Bot
 
-Bot 使用 Socket.io 客户端连接,像普通用户一样参与聊天。
+1. **创建 Bot 环境配置文件**:
+   ```bash
+   cd bots
+   cp .env.example .env
+   nano .env  # 或使用其他编辑器
+   ```
 
-**示例: GPT-4o Bot**
+2. **编辑配置**:
+   ```env
+   # 服务器地址
+   SERVER_URL=http://localhost:3030  # 本地部署
+   # SERVER_URL=https://your-domain.com:63030  # HTTPS 部署
+
+   # Bot 用户名和密码
+   BOT_USERNAME=gpt-bot
+   BOT_PASSWORD=your-bot-password-here
+
+   # Microsoft Foundry GPT-4o 配置
+   FOUNDRY_ENDPOINT=https://your-foundry-endpoint.azure.com/v1/chat/completions
+   FOUNDRY_API_KEY=your-foundry-api-key-here
+   ```
+
+3. **首次运行前需在网页端注册 Bot 账号**:
+   - 访问 http://localhost:3030
+   - 使用 Bot 的用户名和密码登录一次（会自动注册）
+   - 登出
+
+4. **启动 Bot**:
+   ```bash
+   node bots/gpt-bot.js
+   ```
+
+### Bot 示例代码
 
 ```javascript
 const io = require('socket.io-client');
@@ -105,18 +162,7 @@ socket.on('message', async (data) => {
 });
 ```
 
-### 方式 2: HTTP API（可选）
-
-```bash
-# 发送消息
-curl -X POST http://localhost:3030/api/message \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer BOT_TOKEN" \
-  -d '{
-    "roomId": "lobby",
-    "text": "Hello from bot!"
-  }'
-```
+**使用 Bot**: 在聊天室中发送 `@gpt-bot 你的问题` 即可与 GPT-4o 对话。
 
 ## 🏗️ 系统架构
 
@@ -257,99 +303,99 @@ CREATE TABLE room_members (
 
 ## 🚀 部署
 
-### 开发环境
-```bash
-npm start
-# 访问: http://localhost:3030
-```
+### 生产环境（推荐使用 PM2）
 
-### 生产环境（局域网服务器）
-
-**方式 1: 直接运行**
 ```bash
-npm install --production
-npm start
-```
-
-**方式 2: 使用 PM2（推荐）**
-```bash
+# 安装 PM2
 npm install -g pm2
-pm2 start server/index.js --name simple-chat
-pm2 save
+
+# 启动服务器并设置开机自启
+pm2 start server/index.js --name chat-server
 pm2 startup
+pm2 save
+
+# 查看状态和日志
+pm2 status
+pm2 logs chat-server
 ```
 
-**方式 3: 系统服务（Linux）**
-创建 systemd service 文件
+### HTTPS 部署（Nginx 反向代理）
+
+如需通过公网 HTTPS 访问，请参考 [DEPLOYMENT.md](DEPLOYMENT.md) 中的详细配置说明。
 
 ### 获取局域网 IP
 
-**Windows:**
-```powershell
-ipconfig
-# 查找 IPv4 地址
-```
-
-**macOS/Linux:**
 ```bash
-ifconfig
-# 或
-ip addr show
+# Ubuntu/Linux
+ip addr show | grep inet
+
+# Windows
+ipconfig
+
+# macOS
+ifconfig | grep inet
 ```
 
-分享 `http://你的IP:3030` 给家人和 Bot。
+分享 `http://YOUR_IP:3030` 给家人和团队成员使用。
 
 ## 📱 家人使用指南
 
-### 1. 首次访问
+### 1. 访问聊天应用
 
-访问: `http://192.168.x.x:3030`
+打开浏览器访问: `http://SERVER_IP:3030`（向管理员获取服务器 IP 地址）
 
 ### 2. 注册账号
 
-- 输入用户名（例如: `妈妈`, `爸爸`, `弟弟`）
+- 输入用户名（例如: `爸爸`, `妈妈`, `弟弟`）
 - 设置密码（建议简单易记）
 - 自动进入"大厅"
 
 ### 3. 发送消息
 
-- 在输入框输入文本
-- 按 Enter 或点击发送按钮
-- 所有人都能看到
+- 在输入框输入文本，按 Enter 或点击发送按钮
+- 所有大厅成员都能看到
 
 ### 4. 私聊
 
 - 点击左侧用户列表中的用户名
-- 打开私聊窗口
+- 自动打开私聊窗口
 - 仅你们两人可见
 
-### 5. @ 提及
+### 5. @ 提及 Bot
 
-- 输入 `@gpt-bot 问题` 提及 Bot
+- 输入 `@gpt-bot 问题` 提及 Bot（如果管理员启用了 Bot）
 - Bot 会自动回复
+
+### 移动端使用
+
+**iOS/Android**: 在浏览器访问后，选择"添加到主屏幕"，即可像 App 一样使用。
 
 ## 🤖 运行 Bot
 
-### 在服务器上
+### 配置并启动 GPT-4o Bot
+
 ```bash
-cd simple-lan-chat/bots
+# 进入 bots 目录
+cd bots
+
+# 复制环境配置
+cp .env.example .env
+
+# 编辑配置文件
+nano .env
+# 配置 SERVER_URL, BOT_USERNAME, BOT_PASSWORD, FOUNDRY_ENDPOINT, FOUNDRY_API_KEY
+
+# 首次使用需在网页端注册 Bot 账号
+# 访问 http://localhost:3030，使用 Bot 用户名密码登录一次
+
+# 启动 Bot
 node gpt-bot.js
+
+# 或使用 PM2 后台运行
+pm2 start gpt-bot.js --name gpt-bot
 ```
 
-### 在其他设备
-```bash
-# 配置 .env
-SERVER_URL=http://192.168.x.x:3030
-BOT_USERNAME=gpt-bot
-BOT_PASSWORD=your-password
-FOUNDRY_ENDPOINT=...
-FOUNDRY_API_KEY=...
-
-# 启动
-node gpt-bot.js
-```
-
-Bot 会自动登录并在"大厅"中等待提及。
+Bot 会自动登录并在"大厅"中等待 @ 提及。在聊天室发送 `@gpt-bot 你的问题` 即可与 GPT-4o 对话。
 
 ## 📊 消息搜索
 
@@ -372,33 +418,25 @@ socket.on('searchResults', (results) => {
 
 ### 环境变量 (.env)
 
+主服务器配置（根目录 `.env`）:
+
 ```env
 # 服务器配置
 PORT=3030
 HOST=0.0.0.0
 
-# JWT 密钥（自动生成）
-JWT_SECRET=auto-generated-secret
+# JWT 密钥（自动生成，生产环境建议手动设置）
+# JWT_SECRET=your-secret-key-here
 
-# 数据库路径
-DB_PATH=./data/chat.db
-
-# 日志级别
-LOG_LEVEL=info
+# 数据库路径（可选）
+# DB_PATH=./data/chat.db
 ```
+
+Bot 配置请参考 `bots/.env.example`。
 
 ### 自定义配置
 
-编辑 `server/config.js`:
-
-```javascript
-module.exports = {
-  defaultRoom: 'lobby',      // 默认房间名
-  maxMessageLength: 5000,    // 消息最大长度
-  messageRetentionDays: 365, // 消息保留天数
-  maxOnlineUsers: 100        // 最大在线用户数
-};
-```
+如需修改默认房间、消息长度等，可编辑 `server/index.js` 和 `server/db.js` 中的相关常量。
 
 ## 🎯 未来计划
 
@@ -412,20 +450,28 @@ module.exports = {
 
 ## 🐛 故障排除
 
-### 无法连接服务器
-- 检查防火墙是否开放 3030 端口
-- 确认服务器正在运行: `npm start`
-- 确认 IP 地址正确
+### 常见问题
 
-### Bot 无法登录
-- 检查用户名密码是否正确
+**无法连接服务器**
+- 检查防火墙: `sudo ufw allow 3030/tcp`
+- 确认服务器运行: `pm2 status` 或查看终端输出
+- 确认 IP 地址正确: `ip addr show`
+
+**Bot 无法登录**
+- 确保 Bot 账号已在网页端注册
+- 检查 `bots/.env` 配置是否正确
 - 查看 Bot 日志输出
-- 确认服务器 URL 正确
 
-### 消息未实时更新
-- 检查 WebSocket 连接状态
+**消息未实时更新**
 - 刷新页面重新连接
-- 查看浏览器控制台错误
+- 查看浏览器控制台 (F12) 的 WebSocket 连接状态
+- 检查服务器日志
+
+**Ubuntu 安装依赖失败**
+- 确保已安装构建工具: `sudo apt-get install build-essential python3`
+- 删除 node_modules 重试: `rm -rf node_modules && npm install`
+
+更多详细故障排除，请查看 [TROUBLESHOOTING.md](TROUBLESHOOTING.md)。
 
 ## 📝 开发指南
 
