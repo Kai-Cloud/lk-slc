@@ -180,7 +180,10 @@ const roomDb = {
     FROM rooms r
     JOIN room_members rm ON r.id = rm.room_id
     WHERE rm.user_id = ?
-    ORDER BY rm.pinned DESC, rm.joined_at DESC
+    ORDER BY
+      CASE WHEN r.id = 'lobby' THEN 0 ELSE 1 END,
+      rm.pinned DESC,
+      rm.joined_at DESC
   `),
 
   // 添加房间成员
@@ -371,6 +374,10 @@ function getOrCreatePrivateRoom(userId1, userId2) {
     roomDb.addMember.run(roomId, userId2);
 
     room = roomDb.findById.get(roomId);
+  } else {
+    // 房间已存在，确保两个用户都是成员（处理删除后重新加入的情况）
+    roomDb.addMember.run(roomId, userId1);
+    roomDb.addMember.run(roomId, userId2);
   }
 
   return room;

@@ -296,8 +296,9 @@ io.on('connection', (socket) => {
                 targetSocket.join(roomId);
               }
 
-              // 重新获取完整的房间信息（包含更新后的成员列表）
-              const updatedRoom = roomDb.findById.get(roomId);
+              // 重新获取完整的房间信息（包含 pinned 字段）
+              const userRooms = roomDb.getUserRooms.all(userId);
+              const updatedRoom = userRooms.find(r => r.id === roomId);
               const roomWithDetails = {
                 ...updatedRoom,
                 members: roomDb.getMembers.all(roomId),
@@ -391,14 +392,30 @@ io.on('connection', (socket) => {
       if (targetSocket) {
         targetSocket.join(room.id);
       }
-      // 通知对方有新房间
-      io.to(targetSocketId).emit('newRoom', room);
+
+      // 检查对方的房间列表中是否已有此房间
+      const targetRooms = roomDb.getUserRooms.all(targetUserId);
+      const targetHasRoom = targetRooms.some(r => r.id === room.id);
+
+      // 只有对方没有此房间时才通知（避免重复）
+      if (!targetHasRoom) {
+        // 查询对方的房间信息（包含 pinned 字段）
+        const refreshedTargetRooms = roomDb.getUserRooms.all(targetUserId);
+        const targetRoomData = refreshedTargetRooms.find(r => r.id === room.id);
+
+        const roomWithMembers = {
+          ...(targetRoomData || room),
+          members: roomDb.getMembers.all(room.id),
+          pinned: targetRoomData?.pinned || 0
+        };
+        io.to(targetSocketId).emit('newRoom', roomWithMembers);
+      }
     }
 
-    // 返回房间信息
+    // 返回房间信息给当前用户
     socket.emit('roomCreated', room);
 
-    console.log(`🔒 私聊创建: ${currentUser.username} <-> User#${targetUserId}`);
+    console.log(`🔒 私聊创建/重新加入: ${currentUser.username} <-> User#${targetUserId}`);
   });
 
   // 获取在线用户列表
