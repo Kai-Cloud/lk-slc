@@ -61,6 +61,7 @@ function initDatabase() {
       room_id TEXT NOT NULL,
       user_id INTEGER NOT NULL,
       joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      pinned INTEGER DEFAULT 0,
       PRIMARY KEY (room_id, user_id),
       FOREIGN KEY (room_id) REFERENCES rooms(id),
       FOREIGN KEY (user_id) REFERENCES users(id)
@@ -109,6 +110,20 @@ function initDatabase() {
     db.prepare(`
       INSERT INTO rooms (id, name, type) VALUES (?, ?, ?)
     `).run('lobby', '大厅', 'group');
+  }
+
+  // 数据库迁移：为 room_members 表添加 pinned 字段（如果不存在）
+  try {
+    const tableInfo = db.prepare("PRAGMA table_info(room_members)").all();
+    const hasPinnedColumn = tableInfo.some(col => col.name === 'pinned');
+
+    if (!hasPinnedColumn) {
+      console.log('🔄 数据库迁移: 为 room_members 表添加 pinned 字段...');
+      db.exec('ALTER TABLE room_members ADD COLUMN pinned INTEGER DEFAULT 0');
+      console.log('✅ 迁移完成');
+    }
+  } catch (error) {
+    console.error('⚠️  数据库迁移警告:', error.message);
   }
 
   console.log('✅ 数据库初始化完成:', dbPath);
@@ -161,11 +176,11 @@ const roomDb = {
 
   // 获取用户的所有房间
   getUserRooms: db.prepare(`
-    SELECT r.*, rm.joined_at
+    SELECT r.*, rm.joined_at, rm.pinned
     FROM rooms r
     JOIN room_members rm ON r.id = rm.room_id
     WHERE rm.user_id = ?
-    ORDER BY rm.joined_at DESC
+    ORDER BY rm.pinned DESC, rm.joined_at DESC
   `),
 
   // 添加房间成员
@@ -195,6 +210,16 @@ const roomDb = {
   // 删除房间
   delete: db.prepare(`
     DELETE FROM rooms WHERE id = ?
+  `),
+
+  // 置顶房间
+  pinRoom: db.prepare(`
+    UPDATE room_members SET pinned = 1 WHERE room_id = ? AND user_id = ?
+  `),
+
+  // 取消置顶房间
+  unpinRoom: db.prepare(`
+    UPDATE room_members SET pinned = 0 WHERE room_id = ? AND user_id = ?
   `)
 };
 

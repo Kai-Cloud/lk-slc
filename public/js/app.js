@@ -276,7 +276,9 @@ function renderRoomList() {
   roomList.innerHTML = rooms.map(room => {
     const isActive = room.id === currentRoom?.id;
     const unreadCount = unreadCounts[room.id] || 0;
-    const hasUnread = unreadCount > 0; // 移除 !isActive 条件
+    const hasUnread = unreadCount > 0;
+    const isPinned = room.pinned === 1;
+    const isLobby = room.id === 'lobby';
 
     // 获取房间显示名称
     let displayName = room.name;
@@ -287,16 +289,28 @@ function renderRoomList() {
       }
     }
 
+    // 置顶图标
+    const pinIcon = isPinned ? '<span class="pin-icon" title="已置顶">📌</span>' : '';
+
+    // 置顶按钮（大厅不显示，因为永远置顶）
+    let actionButtons = '';
+    if (room.id !== 'lobby') {
+      const pinButton = isPinned
+        ? '<button class="room-pin-btn" title="取消置顶">📌</button>'
+        : '<button class="room-pin-btn unpinned" title="置顶">📍</button>';
+      actionButtons = `${pinButton}<button class="room-delete-btn" title="删除对话">🗑️</button>`;
+    }
+
     return `
-      <div class="room-item ${isActive ? 'active' : ''} ${hasUnread ? 'has-unread' : ''}" data-room-id="${room.id}">
+      <div class="room-item ${isActive ? 'active' : ''} ${hasUnread ? 'has-unread' : ''} ${isLobby ? 'lobby-room' : ''}" data-room-id="${room.id}">
         <div class="room-item-content">
-          <div class="room-item-title">${escapeHtml(displayName)}</div>
+          <div class="room-item-title">${pinIcon}${escapeHtml(displayName)}</div>
           <div class="room-item-preview" id="room-preview-${room.id}">
             ${room.lastMessage ? escapeHtml(room.lastMessage.text.substring(0, 30)) : '开始聊天...'}
           </div>
         </div>
         ${hasUnread ? `<div class="unread-badge">${unreadCount > 99 ? '99+' : unreadCount}</div>` : ''}
-        ${room.id !== 'lobby' ? '<button class="room-delete-btn" title="删除对话">🗑️</button>' : ''}
+        ${actionButtons}
       </div>
     `;
   }).join('');
@@ -326,6 +340,15 @@ function renderRoomList() {
       deleteBtn.addEventListener('click', (e) => {
         e.stopPropagation(); // 阻止触发选择房间
         deleteRoom(roomId);
+      });
+    }
+
+    // 置顶按钮事件
+    const pinBtn = item.querySelector('.room-pin-btn');
+    if (pinBtn) {
+      pinBtn.addEventListener('click', (e) => {
+        e.stopPropagation(); // 阻止触发选择房间
+        togglePinRoom(roomId);
       });
     }
   });
@@ -412,6 +435,15 @@ function deleteRoom(roomId) {
   if (confirm(`确定要删除对话"${roomName}"吗？`)) {
     socket.emit('deleteRoom', { roomId });
   }
+}
+
+// 置顶/取消置顶房间
+function togglePinRoom(roomId) {
+  const room = rooms.find(r => r.id === roomId);
+  if (!room) return;
+
+  const newPinnedState = room.pinned === 1 ? 0 : 1;
+  socket.emit('togglePinRoom', { roomId, pinned: newPinnedState });
 }
 
 // 发送消息

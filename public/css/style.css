@@ -164,6 +164,28 @@ body {
   color: #222 !important;
 }
 
+/* 大厅特殊样式 */
+.room-item.lobby-room .room-item-title {
+  color: #667eea;
+  font-weight: 600;
+}
+
+.room-item.lobby-room:hover {
+  background: #f0f4ff;
+}
+
+.room-item.lobby-room.active {
+  background: #e3f2fd;
+  border-left-color: #667eea;
+}
+
+/* 置顶图标 */
+.pin-icon {
+  font-size: 12px;
+  margin-right: 4px;
+  opacity: 0.7;
+}
+
 .room-item-content {
   flex: 1;
   min-width: 0;
@@ -185,7 +207,7 @@ body {
   transition: font-weight 0.2s, color 0.2s;
 }
 
-.room-delete-btn {
+.room-delete-btn, .room-pin-btn {
   background: none;
   border: none;
   font-size: 16px;
@@ -195,10 +217,25 @@ body {
   transition: opacity 0.2s, transform 0.2s;
   border-radius: 4px;
   flex-shrink: 0;
+  margin-left: 4px;
 }
 
-.room-item:hover .room-delete-btn {
+.room-item:hover .room-delete-btn,
+.room-item:hover .room-pin-btn {
   opacity: 1;
+}
+
+.room-pin-btn.unpinned {
+  opacity: 0.5;
+}
+
+.room-item:hover .room-pin-btn.unpinned {
+  opacity: 0.8;
+}
+
+.room-pin-btn:hover {
+  background: rgba(102, 126, 234, 0.1);
+  transform: scale(1.1);
 }
 
 .room-delete-btn:hover {
@@ -206,7 +243,8 @@ body {
   transform: scale(1.1);
 }
 
-.room-delete-btn:active {
+.room-delete-btn:active,
+.room-pin-btn:active {
   transform: scale(0.95);
 }
 

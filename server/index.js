@@ -121,6 +121,13 @@ io.on('connection', (socket) => {
     // 获取用户的所有房间
     const rooms = roomDb.getUserRooms.all(user.id);
 
+    // 确保大厅始终置顶
+    const lobbyRoom = rooms.find(r => r.id === 'lobby');
+    if (lobbyRoom && !lobbyRoom.pinned) {
+      roomDb.pinRoom.run('lobby', user.id);
+      lobbyRoom.pinned = 1;
+    }
+
     // 加入所有房间
     rooms.forEach(room => {
       socket.join(room.id);
@@ -476,6 +483,40 @@ io.on('connection', (socket) => {
         console.log(`👋 用户 ${currentUser.username} 离开群聊房间: ${room.name}`);
       }
     }
+  });
+
+  // 置顶/取消置顶房间
+  socket.on('togglePinRoom', (data) => {
+    if (!currentUser) {
+      socket.emit('error', { message: '请先登录' });
+      return;
+    }
+
+    const { roomId, pinned } = data;
+
+    // 大厅不允许手动取消置顶
+    if (roomId === 'lobby' && !pinned) {
+      socket.emit('error', { message: '大厅始终置顶，无法取消' });
+      return;
+    }
+
+    // 更新数据库
+    if (pinned) {
+      roomDb.pinRoom.run(roomId, currentUser.id);
+    } else {
+      roomDb.unpinRoom.run(roomId, currentUser.id);
+    }
+
+    // 通知客户端更新房间列表
+    const rooms = roomDb.getUserRooms.all(currentUser.id);
+    const roomsWithLastMessage = rooms.map(room => {
+      const lastMessage = messageDb.getLastMessage.get(room.id);
+      return { ...room, lastMessage };
+    });
+
+    socket.emit('roomList', roomsWithLastMessage);
+
+    console.log(`📌 用户 ${currentUser.username} ${pinned ? '置顶' : '取消置顶'}房间: ${roomId}`);
   });
 
   // 断开连接
