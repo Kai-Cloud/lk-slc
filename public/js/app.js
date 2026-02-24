@@ -4,6 +4,8 @@ let currentUser = null;
 let currentRoom = null;
 let rooms = [];
 let onlineUsers = [];
+let unreadCounts = {};  // 未读计数映射 { roomId: count }
+let totalUnreadCount = 0;  // 总未读数
 
 // DOM 元素
 const messageList = document.getElementById('messageList');
@@ -129,6 +131,15 @@ function connectSocket() {
 
   socket.on('roomList', (data) => {
     rooms = data;
+
+    // 初始化未读计数映射
+    unreadCounts = {};
+    data.forEach(room => {
+      if (room.unreadCount) {
+        unreadCounts[room.id] = room.unreadCount;
+      }
+    });
+
     renderRoomList();
 
     // 自动选择第一个房间（大厅）
@@ -210,25 +221,62 @@ function connectSocket() {
     alert('错误: ' + data.message);
   });
 
+  // 接收未读计数更新
+  socket.on('unreadCountUpdate', (data) => {
+    const { roomId, count } = data;
+
+    // 更新未读计数
+    unreadCounts[roomId] = count;
+
+    // 重新渲染房间列表
+    renderRoomList();
+
+    // 重新计算总未读数
+    totalUnreadCount = Object.values(unreadCounts).reduce((sum, c) => sum + c, 0);
+    updatePageTitle();
+  });
+
+  // 接收总未读数更新
+  socket.on('totalUnreadCount', (data) => {
+    totalUnreadCount = data.total;
+    updatePageTitle();
+  });
+
   // 请求在线用户
   setTimeout(() => {
     socket.emit('getOnlineUsers');
   }, 1000);
 }
 
+// 更新页面标题
+function updatePageTitle() {
+  const baseTitle = '简单局域网聊天';
+  if (totalUnreadCount > 0) {
+    document.title = `(${totalUnreadCount}) ${baseTitle}`;
+  } else {
+    document.title = baseTitle;
+  }
+}
+
 // 渲染房间列表
 function renderRoomList() {
-  roomList.innerHTML = rooms.map(room => `
-    <div class="room-item ${room.id === currentRoom?.id ? 'active' : ''}" data-room-id="${room.id}">
-      <div class="room-item-content">
-        <div class="room-item-title">${escapeHtml(room.name)}</div>
-        <div class="room-item-preview" id="room-preview-${room.id}">
-          ${room.lastMessage ? escapeHtml(room.lastMessage.text.substring(0, 30)) : '开始聊天...'}
+  roomList.innerHTML = rooms.map(room => {
+    const isActive = room.id === currentRoom?.id;
+    const unreadCount = unreadCounts[room.id] || 0;
+
+    return `
+      <div class="room-item ${isActive ? 'active' : ''}" data-room-id="${room.id}">
+        <div class="room-item-content">
+          <div class="room-item-title">${escapeHtml(room.name)}</div>
+          <div class="room-item-preview" id="room-preview-${room.id}">
+            ${room.lastMessage ? escapeHtml(room.lastMessage.text.substring(0, 30)) : '开始聊天...'}
+          </div>
         </div>
+        ${unreadCount > 0 && !isActive ? `<div class="unread-badge">${unreadCount > 99 ? '99+' : unreadCount}</div>` : ''}
+        ${room.id !== 'lobby' ? '<button class="room-delete-btn" title="删除对话">🗑️</button>' : ''}
       </div>
-      ${room.id !== 'lobby' ? '<button class="room-delete-btn" title="删除对话">🗑️</button>' : ''}
-    </div>
-  `).join('');
+    `;
+  }).join('');
 
   // 绑定点击事件
   document.querySelectorAll('.room-item').forEach(item => {

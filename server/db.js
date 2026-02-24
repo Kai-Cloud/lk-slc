@@ -78,12 +78,29 @@ function initDatabase() {
     )
   `);
 
+  // 未读消息计数表
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS unread_counts (
+      user_id INTEGER NOT NULL,
+      room_id TEXT NOT NULL,
+      count INTEGER NOT NULL DEFAULT 0,
+      last_message_id INTEGER,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id, room_id),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE CASCADE,
+      FOREIGN KEY (last_message_id) REFERENCES messages(id) ON DELETE SET NULL
+    )
+  `);
+
   // 创建索引
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_messages_room ON messages(room_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_messages_user ON messages(user_id);
     CREATE INDEX IF NOT EXISTS idx_room_members_user ON room_members(user_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+    CREATE INDEX IF NOT EXISTS idx_unread_counts_user ON unread_counts(user_id);
+    CREATE INDEX IF NOT EXISTS idx_unread_counts_room ON unread_counts(room_id);
   `);
 
   // 创建默认 "大厅" 房间
@@ -259,6 +276,47 @@ const sessionDb = {
   `)
 };
 
+// 未读计数操作
+const unreadDb = {
+  // 增加未读计数
+  incrementUnreadCount: db.prepare(`
+    INSERT INTO unread_counts (user_id, room_id, count, last_message_id, updated_at)
+    VALUES (?, ?, 1, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(user_id, room_id)
+    DO UPDATE SET
+      count = count + 1,
+      last_message_id = excluded.last_message_id,
+      updated_at = CURRENT_TIMESTAMP
+  `),
+
+  // 清除未读计数
+  clearUnreadCount: db.prepare(`
+    DELETE FROM unread_counts
+    WHERE user_id = ? AND room_id = ?
+  `),
+
+  // 获取用户所有房间的未读计数
+  getUserUnreadCounts: db.prepare(`
+    SELECT room_id, count, last_message_id, updated_at
+    FROM unread_counts
+    WHERE user_id = ?
+  `),
+
+  // 获取用户总未读数
+  getTotalUnreadCount: db.prepare(`
+    SELECT SUM(count) as total
+    FROM unread_counts
+    WHERE user_id = ?
+  `),
+
+  // 获取单个房间的未读数
+  getRoomUnreadCount: db.prepare(`
+    SELECT count
+    FROM unread_counts
+    WHERE user_id = ? AND room_id = ?
+  `)
+};
+
 // 工具函数：获取私聊房间 ID
 function getPrivateRoomId(userId1, userId2) {
   // 确保 room ID 一致（小的 ID 在前）
@@ -301,6 +359,7 @@ module.exports = {
   roomDb,
   messageDb,
   sessionDb,
+  unreadDb,
   getPrivateRoomId,
   getOrCreatePrivateRoom
 };

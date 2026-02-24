@@ -4,7 +4,7 @@ const { Server } = require('socket.io');
 const path = require('path');
 require('dotenv').config();
 
-const { initDatabase, userDb, roomDb, messageDb, getOrCreatePrivateRoom } = require('./db');
+const { initDatabase, userDb, roomDb, messageDb, unreadDb, getOrCreatePrivateRoom } = require('./db');
 const { authenticateUser, verifyToken, changePassword } = require('./auth');
 
 // 初始化数据库
@@ -129,16 +129,28 @@ io.on('connection', (socket) => {
     // 发送登录成功
     socket.emit('loginSuccess', { user });
 
-    // 发送房间列表
+    // 加载未读计数
+    const unreadCounts = unreadDb.getUserUnreadCounts.all(user.id);
+    const unreadMap = {};
+    unreadCounts.forEach(item => {
+      unreadMap[item.room_id] = item.count;
+    });
+
+    // 发送房间列表（包含未读计数）
     const roomsWithLastMessage = rooms.map(room => {
       const lastMessage = messageDb.getLastMessage.get(room.id);
       return {
         ...room,
-        lastMessage
+        lastMessage,
+        unreadCount: unreadMap[room.id] || 0
       };
     });
 
     socket.emit('roomList', roomsWithLastMessage);
+
+    // 发送总未读数
+    const totalUnread = unreadDb.getTotalUnreadCount.get(user.id);
+    socket.emit('totalUnreadCount', { total: totalUnread?.total || 0 });
 
     // 通知其他用户上线
     io.emit('userOnline', {
@@ -159,6 +171,9 @@ io.on('connection', (socket) => {
 
     const { roomId, limit = 50, before } = data;
 
+    // 清除该房间的未读计数
+    unreadDb.clearUnreadCount.run(currentUser.id, roomId);
+
     let messages;
     if (before) {
       messages = messageDb.getByRoomPaginated.all(roomId, before, limit);
@@ -170,6 +185,13 @@ io.on('connection', (socket) => {
       roomId,
       messages: messages.reverse() // 按时间正序
     });
+
+    // 通知客户端未读计数已清除
+    socket.emit('unreadCountUpdate', { roomId, count: 0 });
+
+    // 更新总未读数
+    const totalUnread = unreadDb.getTotalUnreadCount.get(currentUser.id);
+    socket.emit('totalUnreadCount', { total: totalUnread?.total || 0 });
   });
 
   // 发送消息
@@ -197,10 +219,11 @@ io.on('connection', (socket) => {
 
     // 保存消息到数据库
     const result = messageDb.create.run(roomId, currentUser.id, text.trim());
+    const messageId = result.lastInsertRowid;
 
     // 构建消息对象
     const message = {
-      id: result.lastInsertRowid,
+      id: messageId,
       room_id: roomId,
       user_id: currentUser.id,
       username: currentUser.username,
@@ -212,6 +235,25 @@ io.on('connection', (socket) => {
 
     // 广播到房间
     io.to(roomId).emit('message', message);
+
+    // 为该房间的其他成员增加未读计数
+    const members = roomDb.getMembers.all(roomId);
+    members.forEach(member => {
+      if (member.id !== currentUser.id) {
+        // 增加未读计数
+        unreadDb.incrementUnreadCount.run(member.id, roomId, messageId);
+
+        // 如果用户在线，推送未读计数更新
+        const targetSocketId = onlineUsers.get(member.id);
+        if (targetSocketId) {
+          const unreadCount = unreadDb.getRoomUnreadCount.get(member.id, roomId);
+          io.to(targetSocketId).emit('unreadCountUpdate', {
+            roomId: roomId,
+            count: unreadCount?.count || 0
+          });
+        }
+      }
+    });
 
     // 广播在线用户更新（因为 last_seen 改变了）
     io.emit('userStatusUpdate', {
