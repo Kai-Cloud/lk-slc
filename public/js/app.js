@@ -108,12 +108,17 @@ function initChat() {
 
 // 连接 Socket.io
 function connectSocket() {
-  socket = io({
-    auth: { token }
+  // 自动使用当前页面的协议和主机（HTTPS → WSS, HTTP → WS）
+  socket = io(window.location.origin, {
+    auth: { token },
+    transports: ['websocket', 'polling'],  // 优先 WebSocket
+    secure: window.location.protocol === 'https:',  // HTTPS 时启用安全模式
+    rejectUnauthorized: true  // 验证证书（生产环境推荐）
   });
 
   socket.on('connect', () => {
     console.log('✅ Socket.io 已连接');
+    console.log(`🔗 协议: ${window.location.protocol}, 传输: ${socket.io.engine.transport.name}`);
     updateConnectionStatus('connected');
 
     // 使用 token 登录
