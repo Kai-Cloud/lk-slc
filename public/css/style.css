@@ -158,6 +158,17 @@ body {
   border-left-color: #667eea;
 }
 
+/* 有未读消息的房间样式 */
+.room-item.has-unread .room-item-title {
+  font-weight: 700;
+  color: #222;
+}
+
+.room-item.has-unread .room-item-preview {
+  font-weight: 600;
+  color: #555;
+}
+
 .room-item-content {
   flex: 1;
   min-width: 0;

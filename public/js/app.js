@@ -225,8 +225,14 @@ function connectSocket() {
   socket.on('unreadCountUpdate', (data) => {
     const { roomId, count } = data;
 
+    console.log(`[未读计数更新] 房间: ${roomId}, 新计数: ${count}`);
+
     // 更新未读计数
-    unreadCounts[roomId] = count;
+    if (count === 0) {
+      delete unreadCounts[roomId];
+    } else {
+      unreadCounts[roomId] = count;
+    }
 
     // 重新渲染房间列表
     renderRoomList();
@@ -263,16 +269,17 @@ function renderRoomList() {
   roomList.innerHTML = rooms.map(room => {
     const isActive = room.id === currentRoom?.id;
     const unreadCount = unreadCounts[room.id] || 0;
+    const hasUnread = unreadCount > 0 && !isActive;
 
     return `
-      <div class="room-item ${isActive ? 'active' : ''}" data-room-id="${room.id}">
+      <div class="room-item ${isActive ? 'active' : ''} ${hasUnread ? 'has-unread' : ''}" data-room-id="${room.id}">
         <div class="room-item-content">
           <div class="room-item-title">${escapeHtml(room.name)}</div>
           <div class="room-item-preview" id="room-preview-${room.id}">
             ${room.lastMessage ? escapeHtml(room.lastMessage.text.substring(0, 30)) : '开始聊天...'}
           </div>
         </div>
-        ${unreadCount > 0 && !isActive ? `<div class="unread-badge">${unreadCount > 99 ? '99+' : unreadCount}</div>` : ''}
+        ${hasUnread ? `<div class="unread-badge">${unreadCount > 99 ? '99+' : unreadCount}</div>` : ''}
         ${room.id !== 'lobby' ? '<button class="room-delete-btn" title="删除对话">🗑️</button>' : ''}
       </div>
     `;

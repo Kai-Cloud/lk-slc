@@ -246,10 +246,19 @@ io.on('connection', (socket) => {
         // 如果用户在线，推送未读计数更新
         const targetSocketId = onlineUsers.get(member.id);
         if (targetSocketId) {
-          const unreadCount = unreadDb.getRoomUnreadCount.get(member.id, roomId);
+          // 查询最新的未读计数
+          const unreadResult = unreadDb.getRoomUnreadCount.get(member.id, roomId);
+          const newCount = unreadResult ? unreadResult.count : 1;
+
           io.to(targetSocketId).emit('unreadCountUpdate', {
             roomId: roomId,
-            count: unreadCount?.count || 0
+            count: newCount
+          });
+
+          // 同时推送总未读数更新
+          const totalUnread = unreadDb.getTotalUnreadCount.get(member.id);
+          io.to(targetSocketId).emit('totalUnreadCount', {
+            total: totalUnread?.total || 0
           });
         }
       }
