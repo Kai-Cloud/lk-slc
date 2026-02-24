@@ -197,7 +197,15 @@ function connectSocket() {
   });
 
   socket.on('roomCreated', (room) => {
-    rooms.push(room);
+    // 检查房间是否已存在
+    const existingRoomIndex = rooms.findIndex(r => r.id === room.id);
+    if (existingRoomIndex !== -1) {
+      // 更新已存在的房间
+      rooms[existingRoomIndex] = room;
+    } else {
+      // 添加新房间
+      rooms.push(room);
+    }
     renderRoomList();
     selectRoom(room);
   });
@@ -689,8 +697,11 @@ function handleMessageInput(e) {
 }
 
 function showMentionSuggestions() {
-  // 过滤用户列表
-  const suggestions = onlineUsers
+  // 获取当前房间的成员
+  const roomMembers = currentRoom?.members || [];
+
+  // 过滤用户列表：只显示当前房间的成员
+  const suggestions = roomMembers
     .filter(u => {
       if (u.id === currentUser.id) return false;
       const username = (u.username || '').toLowerCase();
