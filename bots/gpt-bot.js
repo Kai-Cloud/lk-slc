@@ -3,36 +3,36 @@ const axios = require('axios');
 const https = require('https');
 require('dotenv').config();
 
-// 配置
+// Configuration
 const SERVER_URL = process.env.SERVER_URL || 'http://localhost:3030';
 const BOT_USERNAME = process.env.BOT_USERNAME || 'gpt-bot';
 const BOT_PASSWORD = process.env.BOT_PASSWORD;
 const FOUNDRY_ENDPOINT = process.env.FOUNDRY_ENDPOINT;
 const FOUNDRY_API_KEY = process.env.FOUNDRY_API_KEY;
-const REJECT_UNAUTHORIZED = process.env.REJECT_UNAUTHORIZED !== 'false'; // 默认验证证书
+const REJECT_UNAUTHORIZED = process.env.REJECT_UNAUTHORIZED !== 'false'; // Default: verify certificates
 
-// 如果禁用证书验证，显示警告
+// If certificate verification is disabled, show warning
 if (!REJECT_UNAUTHORIZED) {
-  console.warn('⚠️  警告: 已禁用 SSL 证书验证（REJECT_UNAUTHORIZED=false）');
-  console.warn('⚠️  这会降低安全性，仅用于开发/测试环境的自签名证书\n');
+  console.warn('⚠️  Warning: SSL certificate verification disabled (REJECT_UNAUTHORIZED=false)');
+  console.warn('⚠️  This reduces security, only use for development/testing with self-signed certificates\n');
 }
 
-// 验证配置
+// Validate configuration
 if (!BOT_PASSWORD) {
-  console.error('❌ 错误: 缺少 BOT_PASSWORD 环境变量');
-  console.error('请在 .env 文件中设置: BOT_PASSWORD=your-password');
+  console.error('❌ Error: Missing BOT_PASSWORD environment variable');
+  console.error('Please set in .env file: BOT_PASSWORD=your-password');
   process.exit(1);
 }
 
 if (!FOUNDRY_ENDPOINT || !FOUNDRY_API_KEY) {
-  console.error('❌ 错误: 缺少 Foundry GPT-4o 配置');
-  console.error('请在 .env 文件中设置:');
+  console.error('❌ Error: Missing Foundry GPT-4o configuration');
+  console.error('Please set in .env file:');
   console.error('  FOUNDRY_ENDPOINT=https://your-endpoint.azure.com/v1/chat/completions');
   console.error('  FOUNDRY_API_KEY=your-api-key');
   process.exit(1);
 }
 
-// 调用 GPT-4o
+// Call GPT-4o
 async function callGPT4o(userMessage) {
   try {
     const response = await axios.post(
@@ -41,7 +41,7 @@ async function callGPT4o(userMessage) {
         messages: [
           {
             role: 'system',
-            content: '你是一个友好的 AI 助手,在局域网聊天室中帮助用户回答问题。请用简洁、友好的方式回答。'
+            content: 'You are a friendly AI assistant helping users answer questions in a LAN chat room. Please respond in a concise and friendly manner.'
           },
           {
             role: 'user',
@@ -62,24 +62,24 @@ async function callGPT4o(userMessage) {
     return response.data.choices[0].message.content;
   } catch (error) {
     const errorData = error.response ? error.response.data : null;
-    console.error('❌ GPT-4o 调用失败:', errorData || error.message);
-    return '抱歉，我遇到了问题，暂时无法回答你的问题。';
+    console.error('❌ GPT-4o call failed:', errorData || error.message);
+    return 'Sorry, I encountered an issue and cannot answer your question at the moment.';
   }
 }
 
-// 主函数
+// Main function
 async function main() {
   console.log('\n========================================');
-  console.log('🤖 GPT-4o Bot 启动中...');
+  console.log('🤖 GPT-4o Bot starting...');
   console.log('========================================\n');
 
-  // 先通过 HTTP API 登录获取 token
+  // First login via HTTP API to get token
   let token;
   try {
-    console.log(`📡 正在登录服务器: ${SERVER_URL}`);
-    console.log(`👤 Bot 用户名: ${BOT_USERNAME}\n`);
+    console.log(`📡 Logging in to server: ${SERVER_URL}`);
+    console.log(`👤 Bot username: ${BOT_USERNAME}\n`);
 
-    // 配置 axios，允许忽略自签名证书
+    // Configure axios to allow ignoring self-signed certificates
     const axiosConfig = {
       httpsAgent: new https.Agent({
         rejectUnauthorized: REJECT_UNAUTHORIZED
@@ -93,174 +93,174 @@ async function main() {
     }, axiosConfig);
 
     if (!loginRes.data.success) {
-      throw new Error(loginRes.data.error || '登录失败');
+      throw new Error(loginRes.data.error || 'Login failed');
     }
 
     token = loginRes.data.token;
-    console.log('✅ 登录成功！\n');
+    console.log('✅ Login successful!\n');
 
   } catch (error) {
     const errorMessage = error.response && error.response.data && error.response.data.error
       ? error.response.data.error
       : error.message;
-    console.error('❌ 登录失败:', errorMessage);
-    console.error('\n请检查:');
-    console.error('  1. 服务器是否正在运行');
-    console.error('  2. SERVER_URL 是否正确');
-    console.error('  3. BOT_PASSWORD 是否正确');
+    console.error('❌ Login failed:', errorMessage);
+    console.error('\nPlease check:');
+    console.error('  1. Server is running');
+    console.error('  2. SERVER_URL is correct');
+    console.error('  3. BOT_PASSWORD is correct');
     process.exit(1);
   }
 
-  // 连接 Socket.io
+  // Connect Socket.io
   const socket = io(SERVER_URL, {
     auth: { token },
-    reconnection: true,           // 启用自动重连
-    reconnectionDelay: 1000,      // 首次重连延迟 1 秒
-    reconnectionDelayMax: 5000,   // 最大重连延迟 5 秒
-    reconnectionAttempts: Infinity, // 无限重连
-    timeout: 20000,               // 连接超时 20 秒
-    rejectUnauthorized: REJECT_UNAUTHORIZED  // SSL 证书验证控制
+    reconnection: true,           // Enable auto-reconnect
+    reconnectionDelay: 1000,      // First reconnect delay: 1 second
+    reconnectionDelayMax: 5000,   // Max reconnect delay: 5 seconds
+    reconnectionAttempts: Infinity, // Infinite reconnect attempts
+    timeout: 20000,               // Connection timeout: 20 seconds
+    rejectUnauthorized: REJECT_UNAUTHORIZED  // SSL certificate verification control
   });
 
   let currentUser = null;
-  const processedMessages = new Set(); // 防止重复处理
-  const roomsMap = new Map(); // 存储房间信息 (roomId -> room)
+  const processedMessages = new Set(); // Prevent duplicate processing
+  const roomsMap = new Map(); // Store room info (roomId -> room)
 
   socket.on('connect', () => {
-    console.log('✅ WebSocket 已连接\n');
+    console.log('✅ WebSocket connected\n');
     socket.emit('loginWithToken', { token });
   });
 
   socket.on('disconnect', (reason) => {
-    console.log(`❌ WebSocket 已断开: ${reason}`);
+    console.log(`❌ WebSocket disconnected: ${reason}`);
     if (reason === 'io server disconnect') {
-      // 服务端主动断开，尝试重连
-      console.log('🔄 服务端断开连接，将自动重连...');
+      // Server initiated disconnect, attempt reconnect
+      console.log('🔄 Server disconnected, will auto-reconnect...');
       socket.connect();
     }
   });
 
   socket.on('connect_error', (error) => {
-    console.error('❌ 连接错误:', error.message);
+    console.error('❌ Connection error:', error.message);
   });
 
   socket.on('reconnect', (attemptNumber) => {
-    console.log(`✅ 已重新连接 (尝试次数: ${attemptNumber})`);
-    console.log('🔄 正在重新登录...');
+    console.log(`✅ Reconnected (attempts: ${attemptNumber})`);
+    console.log('🔄 Re-logging in...');
     socket.emit('loginWithToken', { token });
   });
 
   socket.on('reconnect_attempt', (attemptNumber) => {
-    console.log(`🔄 正在尝试重连... (第 ${attemptNumber} 次)`);
+    console.log(`🔄 Attempting to reconnect... (attempt ${attemptNumber})`);
   });
 
   socket.on('reconnect_error', (error) => {
-    console.error('❌ 重连失败:', error.message);
+    console.error('❌ Reconnect failed:', error.message);
   });
 
   socket.on('reconnect_failed', () => {
-    console.error('❌ 重连失败：已达到最大尝试次数');
+    console.error('❌ Reconnect failed: Max attempts reached');
     process.exit(1);
   });
 
   socket.on('loginSuccess', (data) => {
     currentUser = data.user;
     console.log('========================================');
-    console.log('🎉 Bot 已上线！');
+    console.log('🎉 Bot is online!');
     console.log('========================================');
     console.log(`\n📍 Bot ID: ${currentUser.id}`);
-    console.log(`📍 用户名: ${currentUser.username}`);
-    console.log(`\n💡 提示: 在聊天中使用 @${currentUser.username} 来提及我\n`);
-    console.log('💡 私聊房间中可以直接对话，无需 @ 提及\n');
-    console.log('等待用户消息...\n');
+    console.log(`📍 Username: ${currentUser.username}`);
+    console.log(`\n💡 Tip: Use @${currentUser.username} to mention me in chat\n`);
+    console.log('💡 In private rooms, you can chat directly without @ mention\n');
+    console.log('Waiting for user messages...\n');
   });
 
   socket.on('roomList', (rooms) => {
-    // 存储房间信息
+    // Store room info
     rooms.forEach(room => {
       roomsMap.set(room.id, room);
     });
-    console.log(`📁 已加载 ${rooms.length} 个房间`);
+    console.log(`📁 Loaded ${rooms.length} rooms`);
   });
 
   socket.on('newRoom', (room) => {
-    // 新房间创建时更新
+    // Update on new room creation
     roomsMap.set(room.id, room);
-    console.log(`📁 新房间: ${room.name} (${room.type})`);
+    console.log(`📁 New room: ${room.name} (${room.type})`);
   });
 
   socket.on('loginError', (data) => {
-    console.error('❌ 登录失败:', data.message);
+    console.error('❌ Login failed:', data.message);
     process.exit(1);
   });
 
   socket.on('message', async (message) => {
-    // 防止重复处理
+    // Prevent duplicate processing
     if (processedMessages.has(message.id)) {
       return;
     }
     processedMessages.add(message.id);
 
-    // 清理旧的消息 ID（保留最近 1000 条）
+    // Clean up old message IDs (keep most recent 1000)
     if (processedMessages.size > 1000) {
       const arr = Array.from(processedMessages);
       processedMessages.clear();
       arr.slice(-1000).forEach(id => processedMessages.add(id));
     }
 
-    // 忽略自己的消息
+    // Ignore own messages
     if (message.user_id === currentUser.id) {
       return;
     }
 
-    // 获取房间信息
+    // Get room info
     const room = roomsMap.get(message.room_id);
     const isPrivateChat = room && room.type === 'private';
 
-    // 检查是否被提及
+    // Check if bot is mentioned
     const isMentioned = message.text.includes(`@${currentUser.username}`);
 
-    // 私聊房间：响应所有消息；群聊房间：只响应 @ 提及
+    // Private room: respond to all messages; Group room: only respond to @ mentions
     if (!isPrivateChat && !isMentioned) {
       return;
     }
 
-    // 提取用户问题
+    // Extract user question
     let userQuestion;
     if (isMentioned) {
-      // 如果有 @ 提及，移除 @ 部分
+      // If @ mentioned, remove @ part
       userQuestion = message.text
         .replace(new RegExp(`@${currentUser.username}:?`, 'g'), '')
         .trim();
     } else {
-      // 私聊中没有 @ 提及，直接使用全部文本
+      // In private chat without @ mention, use full text
       userQuestion = message.text.trim();
     }
 
     if (!userQuestion) {
       socket.emit('sendMessage', {
         roomId: message.room_id,
-        text: '你好！我是 GPT-4o 助手。' + (isPrivateChat ? '私聊中可以直接提问！' : '使用 @' + currentUser.username + ' 问题 来提问吧！')
+        text: 'Hello! I am GPT-4o assistant. ' + (isPrivateChat ? 'You can ask questions directly in private chat!' : 'Use @' + currentUser.username + ' question to ask!')
       });
       return;
     }
 
     console.log('========================================');
-    console.log(`📩 收到消息 (${isPrivateChat ? '私聊' : '群聊'})`);
+    console.log(`📩 Received message (${isPrivateChat ? 'private chat' : 'group chat'})`);
     console.log('========================================');
-    console.log(`👤 用户: ${message.display_name || message.username}`);
-    console.log(`🏠 房间: ${room ? room.name : message.room_id}`);
-    console.log(`❓ 问题: ${userQuestion}`);
+    console.log(`👤 User: ${message.display_name || message.username}`);
+    console.log(`🏠 Room: ${room ? room.name : message.room_id}`);
+    console.log(`❓ Question: ${userQuestion}`);
     console.log('');
 
-    // 调用 GPT-4o
-    console.log('🤔 正在思考...');
+    // Call GPT-4o
+    console.log('🤔 Thinking...');
     const reply = await callGPT4o(userQuestion);
 
-    console.log('💬 回复: ' + reply.substring(0, 100) + (reply.length > 100 ? '...' : ''));
+    console.log('💬 Reply: ' + reply.substring(0, 100) + (reply.length > 100 ? '...' : ''));
     console.log('');
 
-    // 发送回复
+    // Send reply
     socket.emit('sendMessage', {
       roomId: message.room_id,
       text: reply
@@ -268,27 +268,27 @@ async function main() {
   });
 
   socket.on('error', (data) => {
-    console.error('❌ 错误:', data.message);
+    console.error('❌ Error:', data.message);
   });
 
-  // 心跳机制：定期发送 keepAlive 保持在线状态
+  // Heartbeat mechanism: Periodically send keepAlive to maintain online status
   setInterval(() => {
     if (socket.connected && currentUser) {
       socket.emit('keepAlive');
-      console.log('💓 发送心跳');
+      console.log('💓 Sending heartbeat');
     }
-  }, 30000); // 每 30 秒一次（服务端认为 5 分钟内活跃为在线）
+  }, 30000); // Every 30 seconds (server considers activity within 5 minutes as online)
 
-  // 捕获退出信号
+  // Capture exit signals
   process.on('SIGINT', () => {
-    console.log('\n\n👋 Bot 正在退出...');
+    console.log('\n\n👋 Bot exiting...');
     socket.disconnect();
     process.exit(0);
   });
 }
 
-// 启动 Bot
+// Start Bot
 main().catch(error => {
-  console.error('\n❌ Bot 启动失败:', error);
+  console.error('\n❌ Bot startup failed:', error);
   process.exit(1);
 });

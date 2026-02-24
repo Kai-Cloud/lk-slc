@@ -17,29 +17,29 @@
     <!-- 侧边栏 -->
     <div class="sidebar" id="sidebar">
       <div class="sidebar-header">
-        <h2>💬 聊天</h2>
-        <button class="btn-icon" id="logoutBtn" title="登出">🚪</button>
+        <h2 data-i18n="chat.title">💬 聊天</h2>
+        <button class="btn-icon" id="logoutBtn" title-i18n="chat.logout" title="登出">🚪</button>
       </div>
 
       <div class="user-info">
         <div class="user-avatar">👤</div>
         <div class="user-details">
-          <div class="user-name" id="currentUserName">加载中...</div>
-          <div class="user-status online">在线</div>
+          <div class="user-name" id="currentUserName" data-i18n="loading">加载中...</div>
+          <div class="user-status online" data-i18n="chat.online">在线</div>
         </div>
-        <button class="btn-icon" id="settingsBtn" title="设置">⚙️</button>
+        <button class="btn-icon" id="settingsBtn" title-i18n="chat.settings" title="设置">⚙️</button>
       </div>
 
       <!-- 房间列表 -->
-      <div class="section-title">房间</div>
+      <div class="section-title" data-i18n="chat.rooms">房间</div>
       <div class="room-list" id="roomList">
         <!-- 动态加载 -->
       </div>
 
       <!-- 在线用户 -->
       <div class="section-title">
-        在线用户
-        <button class="btn-refresh" id="refreshUsers" title="刷新">🔄</button>
+        <span data-i18n="chat.onlineUsers">在线用户</span>
+        <button class="btn-refresh" id="refreshUsers" title-i18n="chat.refresh" title="刷新">🔄</button>
       </div>
       <div class="user-list" id="userList">
         <!-- 动态加载 -->
@@ -52,15 +52,15 @@
       <div class="chat-header">
         <button class="btn-menu" id="toggleSidebar">☰</button>
         <div class="chat-title">
-          <h3 id="currentRoomName">选择一个房间开始聊天</h3>
+          <h3 id="currentRoomName" data-i18n="chat.selectRoom">选择一个房间开始聊天</h3>
           <div class="chat-subtitle" id="roomSubtitle"></div>
         </div>
-        <button class="btn-icon" id="searchBtn" title="搜索消息">🔍</button>
+        <button class="btn-icon" id="searchBtn" title-i18n="chat.search" title="搜索消息">🔍</button>
       </div>
 
       <!-- 搜索栏 (隐藏) -->
       <div class="search-bar hidden" id="searchBar">
-        <input type="text" id="searchInput" placeholder="搜索消息...">
+        <input type="text" id="searchInput" placeholder-i18n="chat.search" placeholder="搜索消息...">
         <button id="closeSearch">✕</button>
       </div>
 
@@ -72,8 +72,8 @@
       <!-- 消息列表 -->
       <div class="message-list" id="messageList">
         <div class="welcome-message">
-          <h2>👋 欢迎来到简单局域网聊天</h2>
-          <p>选择左侧的房间开始聊天，或点击用户发起私聊</p>
+          <h2 data-i18n="chat.welcome">👋 欢迎来到简单局域网聊天</h2>
+          <p data-i18n="chat.welcomeDesc">选择左侧的房间开始聊天，或点击用户发起私聊</p>
         </div>
       </div>
 
@@ -81,10 +81,11 @@
       <div class="input-area" id="inputArea" style="display: none;">
         <textarea
           id="messageInput"
+          placeholder-i18n="chat.inputPlaceholder"
           placeholder="输入消息... (Enter 发送, Shift+Enter 换行)"
           rows="1"
         ></textarea>
-        <button id="sendBtn" class="btn-send" title="发送">📤</button>
+        <button id="sendBtn" class="btn-send" title-i18n="chat.send" title="发送">📤</button>
       </div>
     </div>
   </div>
@@ -92,39 +93,40 @@
   <!-- 连接状态指示器 -->
   <div class="connection-status" id="connectionStatus">
     <span class="status-dot"></span>
-    <span class="status-text">连接中...</span>
+    <span class="status-text" data-i18n="connection.connecting">连接中...</span>
   </div>
 
   <!-- 修改密码模态框 -->
   <div class="modal" id="changePasswordModal">
     <div class="modal-content">
       <div class="modal-header">
-        <h3>修改密码</h3>
+        <h3 data-i18n="modal.changePassword">修改密码</h3>
         <button class="modal-close" id="closePasswordModal">×</button>
       </div>
       <div class="modal-body">
         <div class="form-group">
-          <label for="currentPassword">当前密码</label>
-          <input type="password" id="currentPassword" placeholder="输入当前密码" autocomplete="current-password">
+          <label for="currentPassword" data-i18n="modal.currentPassword">当前密码</label>
+          <input type="password" id="currentPassword" placeholder-i18n="modal.currentPassword" placeholder="输入当前密码" autocomplete="current-password">
         </div>
         <div class="form-group">
-          <label for="newPassword">新密码</label>
-          <input type="password" id="newPassword" placeholder="输入新密码（至少6位）" autocomplete="new-password">
+          <label for="newPassword" data-i18n="modal.newPassword">新密码</label>
+          <input type="password" id="newPassword" placeholder-i18n="modal.newPassword" placeholder="输入新密码（至少6位）" autocomplete="new-password">
         </div>
         <div class="form-group">
-          <label for="confirmPassword">确认新密码</label>
-          <input type="password" id="confirmPassword" placeholder="再次输入新密码" autocomplete="new-password">
+          <label for="confirmPassword" data-i18n="modal.confirmPassword">确认新密码</label>
+          <input type="password" id="confirmPassword" placeholder-i18n="modal.confirmPassword" placeholder="再次输入新密码" autocomplete="new-password">
         </div>
         <div class="error-message" id="passwordError"></div>
       </div>
       <div class="modal-footer">
-        <button class="btn-secondary" id="cancelPasswordChange">取消</button>
-        <button class="btn-primary" id="confirmPasswordChange">确认修改</button>
+        <button class="btn-secondary" id="cancelPasswordChange" data-i18n="modal.cancel">取消</button>
+        <button class="btn-primary" id="confirmPasswordChange" data-i18n="modal.confirm">确认修改</button>
       </div>
     </div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/i18n.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>

@@ -55,7 +55,7 @@ function initDatabase() {
     )
   `);
 
-  // 房间成员表
+  // Room members table
   db.exec(`
     CREATE TABLE IF NOT EXISTS room_members (
       room_id TEXT NOT NULL,
@@ -68,7 +68,7 @@ function initDatabase() {
     )
   `);
 
-  // 会话表（用于持久化登录）
+  // Sessions table (for persistent login)
   db.exec(`
     CREATE TABLE IF NOT EXISTS sessions (
       token TEXT PRIMARY KEY,
@@ -79,7 +79,7 @@ function initDatabase() {
     )
   `);
 
-  // 未读消息计数表
+  // Unread counts table
   db.exec(`
     CREATE TABLE IF NOT EXISTS unread_counts (
       user_id INTEGER NOT NULL,
@@ -94,7 +94,7 @@ function initDatabase() {
     )
   `);
 
-  // 创建索引
+  // Create indexes
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_messages_room ON messages(room_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_messages_user ON messages(user_id);
@@ -104,7 +104,7 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_unread_counts_room ON unread_counts(room_id);
   `);
 
-  // 创建默认 "大厅" 房间
+  // Create default "Lobby" room
   const lobby = db.prepare('SELECT id FROM rooms WHERE id = ?').get('lobby');
   if (!lobby) {
     db.prepare(`
@@ -112,50 +112,50 @@ function initDatabase() {
     `).run('lobby', '大厅', 'group');
   }
 
-  // 数据库迁移：为 room_members 表添加 pinned 字段（如果不存在）
+  // Database migration: Add pinned column to room_members table (if not exists)
   try {
     const tableInfo = db.prepare("PRAGMA table_info(room_members)").all();
     const hasPinnedColumn = tableInfo.some(col => col.name === 'pinned');
 
     if (!hasPinnedColumn) {
-      console.log('🔄 数据库迁移: 为 room_members 表添加 pinned 字段...');
+      console.log('🔄 Database migration: Adding pinned column to room_members table...');
       db.exec('ALTER TABLE room_members ADD COLUMN pinned INTEGER DEFAULT 0');
-      console.log('✅ 迁移完成');
+      console.log('✅ Migration complete');
     }
   } catch (error) {
-    console.error('⚠️  数据库迁移警告:', error.message);
+    console.error('⚠️  Database migration warning:', error.message);
   }
 
-  console.log('✅ 数据库初始化完成:', dbPath);
+  console.log('✅ Database initialized:', dbPath);
 }
 
-// 立即初始化数据库
+// Initialize database immediately
 initDatabase();
 
-// 用户操作
+// User operations
 const userDb = {
-  // 创建用户
+  // Create user
   create: db.prepare(`
     INSERT INTO users (username, password_hash, display_name, is_bot)
     VALUES (?, ?, ?, ?)
   `),
 
-  // 通过用户名查找用户
+  // Find user by username
   findByUsername: db.prepare('SELECT * FROM users WHERE username = ? COLLATE NOCASE'),
 
-  // 通过 ID 查找用户
+  // Find user by ID
   findById: db.prepare('SELECT * FROM users WHERE id = ?'),
 
-  // 更新最后在线时间
+  // Update last seen time
   updateLastSeen: db.prepare('UPDATE users SET last_seen = CURRENT_TIMESTAMP WHERE id = ?'),
 
-  // 更新密码
+  // Update password
   updatePassword: db.prepare('UPDATE users SET password_hash = ? WHERE id = ?'),
 
-  // 获取所有用户
+  // Get all users
   getAll: db.prepare('SELECT id, username, display_name, is_bot, last_seen FROM users'),
 
-  // 获取在线用户（最近 5 分钟内活跃）
+  // Get online users (active within last 5 minutes)
   getOnline: db.prepare(`
     SELECT id, username, display_name, is_bot, last_seen
     FROM users
@@ -163,18 +163,18 @@ const userDb = {
   `)
 };
 
-// 房间操作
+// Room operations
 const roomDb = {
-  // 创建房间
+  // Create room
   create: db.prepare(`
     INSERT INTO rooms (id, name, type, created_by)
     VALUES (?, ?, ?, ?)
   `),
 
-  // 查找房间
+  // Find room
   findById: db.prepare('SELECT * FROM rooms WHERE id = ?'),
 
-  // 获取用户的所有房间
+  // Get all user's rooms
   getUserRooms: db.prepare(`
     SELECT r.*, rm.joined_at, rm.pinned
     FROM rooms r
@@ -186,18 +186,18 @@ const roomDb = {
       rm.joined_at DESC
   `),
 
-  // 添加房间成员
+  // Add room member
   addMember: db.prepare(`
     INSERT OR IGNORE INTO room_members (room_id, user_id)
     VALUES (?, ?)
   `),
 
-  // 移除房间成员
+  // Remove room member
   removeMember: db.prepare(`
     DELETE FROM room_members WHERE room_id = ? AND user_id = ?
   `),
 
-  // 获取房间成员
+  // Get room members
   getMembers: db.prepare(`
     SELECT u.id, u.username, u.display_name, u.is_bot, u.last_seen
     FROM users u
@@ -205,36 +205,36 @@ const roomDb = {
     WHERE rm.room_id = ?
   `),
 
-  // 获取房间成员列表（用于检查房间是否为空）
+  // Get room member list (to check if room is empty)
   getRoomMembers: db.prepare(`
     SELECT user_id FROM room_members WHERE room_id = ?
   `),
 
-  // 删除房间
+  // Delete room
   delete: db.prepare(`
     DELETE FROM rooms WHERE id = ?
   `),
 
-  // 置顶房间
+  // Pin room
   pinRoom: db.prepare(`
     UPDATE room_members SET pinned = 1 WHERE room_id = ? AND user_id = ?
   `),
 
-  // 取消置顶房间
+  // Unpin room
   unpinRoom: db.prepare(`
     UPDATE room_members SET pinned = 0 WHERE room_id = ? AND user_id = ?
   `)
 };
 
-// 消息操作
+// Message operations
 const messageDb = {
-  // 创建消息
+  // Create message
   create: db.prepare(`
     INSERT INTO messages (room_id, user_id, text)
     VALUES (?, ?, ?)
   `),
 
-  // 获取房间消息（最近 N 条）
+  // Get room messages (most recent N messages)
   getByRoom: db.prepare(`
     SELECT m.*, u.username, u.display_name, u.is_bot
     FROM messages m
@@ -244,7 +244,7 @@ const messageDb = {
     LIMIT ?
   `),
 
-  // 获取房间消息（分页）
+  // Get room messages (paginated)
   getByRoomPaginated: db.prepare(`
     SELECT m.*, u.username, u.display_name, u.is_bot
     FROM messages m
@@ -254,7 +254,7 @@ const messageDb = {
     LIMIT ?
   `),
 
-  // 搜索消息
+  // Search messages
   search: db.prepare(`
     SELECT m.*, u.username, u.display_name, u.is_bot, r.name as room_name
     FROM messages m
@@ -265,7 +265,7 @@ const messageDb = {
     LIMIT 100
   `),
 
-  // 获取房间最后一条消息
+  // Get last message in room
   getLastMessage: db.prepare(`
     SELECT m.*, u.username, u.display_name
     FROM messages m
@@ -276,15 +276,15 @@ const messageDb = {
   `)
 };
 
-// 会话操作
+// Session operations
 const sessionDb = {
-  // 创建会话
+  // Create session
   create: db.prepare(`
     INSERT INTO sessions (token, user_id, expires_at)
     VALUES (?, ?, datetime('now', '+30 days'))
   `),
 
-  // 查找会话
+  // Find session
   findByToken: db.prepare(`
     SELECT s.*, u.id as user_id, u.username, u.display_name, u.is_bot
     FROM sessions s
@@ -292,21 +292,21 @@ const sessionDb = {
     WHERE s.token = ? AND datetime(s.expires_at) > datetime('now')
   `),
 
-  // 删除会话
+  // Delete session
   delete: db.prepare('DELETE FROM sessions WHERE token = ?'),
 
-  // 删除指定用户的所有会话
+  // Delete all sessions for a specific user
   deleteByUserId: db.prepare('DELETE FROM sessions WHERE user_id = ?'),
 
-  // 删除过期会话
+  // Delete expired sessions
   deleteExpired: db.prepare(`
     DELETE FROM sessions WHERE datetime(expires_at) < datetime('now')
   `)
 };
 
-// 未读计数操作
+// Unread count operations
 const unreadDb = {
-  // 增加未读计数
+  // Increment unread count
   incrementUnreadCount: db.prepare(`
     INSERT INTO unread_counts (user_id, room_id, count, last_message_id, updated_at)
     VALUES (?, ?, 1, ?, CURRENT_TIMESTAMP)
@@ -317,13 +317,13 @@ const unreadDb = {
       updated_at = CURRENT_TIMESTAMP
   `),
 
-  // 清除未读计数
+  // Clear unread count
   clearUnreadCount: db.prepare(`
     DELETE FROM unread_counts
     WHERE user_id = ? AND room_id = ?
   `),
 
-  // 获取用户所有房间的未读计数
+  // Get user's unread counts for all rooms
   getUserUnreadCounts: db.prepare(`
     SELECT room_id, count, last_message_id, updated_at
     FROM unread_counts

@@ -1,11 +1,49 @@
-// 全局变量
+// Global variables
 let socket = null;
 let currentUser = null;
 let currentRoom = null;
 let rooms = [];
 let onlineUsers = [];
-let unreadCounts = {};  // 未读计数映射 { roomId: count }
-let totalUnreadCount = 0;  // 总未读数
+let unreadCounts = {};  // Unread count mapping { roomId: count }
+let totalUnreadCount = 0;  // Total unread count
+
+// Translate page elements
+function translatePage() {
+  // Set document language
+  document.documentElement.lang = i18n.currentLang === 'zh-CN' ? 'zh' : 'en';
+
+  // Update title
+  document.title = i18n.t('chat.title');
+
+  // Translate elements with data-i18n attribute
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.textContent = i18n.t(el.dataset.i18n);
+  });
+
+  // Translate placeholders
+  document.querySelectorAll('[placeholder-i18n]').forEach(el => {
+    el.placeholder = i18n.t(el.getAttribute('placeholder-i18n'));
+  });
+
+  // Translate title attributes
+  document.querySelectorAll('[title-i18n]').forEach(el => {
+    el.title = i18n.t(el.getAttribute('title-i18n'));
+  });
+}
+
+// Listen for language changes
+window.addEventListener('languageChange', () => {
+  translatePage();
+  // Re-render dynamic content
+  renderRoomList();
+  renderOnlineUsers();
+  if (currentRoom) {
+    updateConnectionStatus('connected');
+  }
+});
+
+// Initial translation
+translatePage();
 
 // DOM 元素
 const messageList = document.getElementById('messageList');
@@ -117,34 +155,34 @@ function connectSocket() {
   });
 
   socket.on('connect', () => {
-    console.log('✅ Socket.io 已连接');
-    console.log(`🔗 协议: ${window.location.protocol}, 传输: ${socket.io.engine.transport.name}`);
+    console.log('✅ Socket.io connected');
+    console.log(`🔗 Protocol: ${window.location.protocol}, Transport: ${socket.io.engine.transport.name}`);
     updateConnectionStatus('connected');
 
-    // 使用 token 登录
+    // Login with token
     socket.emit('loginWithToken', { token });
   });
 
   socket.on('disconnect', () => {
-    console.log('❌ Socket.io 已断开');
+    console.log('❌ Socket.io disconnected');
     updateConnectionStatus('disconnected');
   });
 
   socket.on('loginSuccess', (data) => {
-    console.log('✅ 登录成功:', data.user);
+    console.log('✅ Login successful:', data.user);
     currentUser = data.user;
   });
 
   socket.on('loginError', (data) => {
-    console.error('❌ 登录失败:', data.message);
-    alert('登录失败: ' + data.message);
+    console.error('❌ Login failed:', data.message);
+    alert(i18n.t('error.loginFailed') + ': ' + data.message);
     logout();
   });
 
   socket.on('roomList', (data) => {
     rooms = data;
 
-    // 初始化未读计数映射
+    // Initialize unread count mapping
     unreadCounts = {};
     data.forEach(room => {
       if (room.unreadCount) {
@@ -154,7 +192,7 @@ function connectSocket() {
 
     renderRoomList();
 
-    // 自动选择第一个房间（大厅）
+    // Auto-select first room (lobby)
     if (rooms.length > 0 && !currentRoom) {
       selectRoom(rooms[0]);
     }
@@ -178,12 +216,12 @@ function connectSocket() {
   });
 
   socket.on('userOnline', (user) => {
-    console.log('👤 用户上线:', user.username);
+    console.log('👤 User online:', user.username);
     socket.emit('getOnlineUsers');
   });
 
   socket.on('userOffline', (user) => {
-    console.log('👤 用户离线:', user.username);
+    console.log('👤 User offline:', user.username);
     socket.emit('getOnlineUsers');
   });
 
@@ -193,7 +231,7 @@ function connectSocket() {
   });
 
   socket.on('userStatusUpdate', (data) => {
-    // 更新用户的 last_seen 时间
+    // Update user's last_seen time
     const user = onlineUsers.find(u => u.id === data.id);
     if (user) {
       user.last_seen = data.lastSeen;
@@ -202,13 +240,13 @@ function connectSocket() {
   });
 
   socket.on('roomCreated', (room) => {
-    // 检查房间是否已存在
+    // Check if room already exists
     const existingRoomIndex = rooms.findIndex(r => r.id === room.id);
     if (existingRoomIndex !== -1) {
-      // 更新已存在的房间
+      // Update existing room
       rooms[existingRoomIndex] = room;
     } else {
-      // 添加新房间
+      // Add new room
       rooms.push(room);
     }
     renderRoomList();
@@ -238,45 +276,45 @@ function connectSocket() {
   });
 
   socket.on('error', (data) => {
-    alert('错误: ' + data.message);
+    alert(i18n.t('error.connectionError') + ': ' + data.message);
   });
 
-  // 接收未读计数更新
+  // Receive unread count updates
   socket.on('unreadCountUpdate', (data) => {
     const { roomId, count } = data;
 
-    console.log(`[未读计数更新] 房间: ${roomId}, 新计数: ${count}`);
+    console.log(`[Unread count update] Room: ${roomId}, New count: ${count}`);
 
-    // 更新未读计数
+    // Update unread count
     if (count === 0) {
       delete unreadCounts[roomId];
     } else {
       unreadCounts[roomId] = count;
     }
 
-    // 重新渲染房间列表
+    // Re-render room list
     renderRoomList();
 
-    // 重新计算总未读数
+    // Recalculate total unread count
     totalUnreadCount = Object.values(unreadCounts).reduce((sum, c) => sum + c, 0);
     updatePageTitle();
   });
 
-  // 接收总未读数更新
+  // Receive total unread count update
   socket.on('totalUnreadCount', (data) => {
     totalUnreadCount = data.total;
     updatePageTitle();
   });
 
-  // 请求在线用户
+  // Request online users
   setTimeout(() => {
     socket.emit('getOnlineUsers');
   }, 1000);
 }
 
-// 更新页面标题
+// Update page title
 function updatePageTitle() {
-  const baseTitle = '简单局域网聊天';
+  const baseTitle = i18n.t('chat.title');
   if (totalUnreadCount > 0) {
     document.title = `(${totalUnreadCount}) ${baseTitle}`;
   } else {
@@ -305,13 +343,13 @@ function renderRoomList() {
     // 置顶图标
     const pinIcon = isPinned ? '<span class="pin-icon" title="已置顶">📌</span>' : '';
 
-    // 置顶按钮（大厅不显示，因为永远置顶）
+    // Pin button (lobby doesn't show, as it's always pinned)
     let actionButtons = '';
     if (room.id !== 'lobby') {
       const pinButton = isPinned
-        ? '<button class="room-pin-btn" title="取消置顶">📌</button>'
-        : '<button class="room-pin-btn unpinned" title="置顶">📍</button>';
-      actionButtons = `${pinButton}<button class="room-delete-btn" title="删除对话">🗑️</button>`;
+        ? `<button class="room-pin-btn" title="${i18n.t('room.unpin')}">📌</button>`
+        : `<button class="room-pin-btn unpinned" title="${i18n.t('room.pin')}">📍</button>`;
+      actionButtons = `${pinButton}<button class="room-delete-btn" title="${i18n.t('room.delete')}">🗑️</button>`;
     }
 
     return `
@@ -319,7 +357,7 @@ function renderRoomList() {
         <div class="room-item-content">
           <div class="room-item-title">${pinIcon}${escapeHtml(displayName)}</div>
           <div class="room-item-preview" id="room-preview-${room.id}">
-            ${room.lastMessage ? escapeHtml(room.lastMessage.text.substring(0, 30)) : '开始聊天...'}
+            ${room.lastMessage ? escapeHtml(room.lastMessage.text.substring(0, 30)) : i18n.t('room.startChat')}
           </div>
         </div>
         ${hasUnread ? `<div class="unread-badge">${unreadCount > 99 ? '99+' : unreadCount}</div>` : ''}
@@ -379,7 +417,7 @@ function renderUserList() {
       </div>
     `).join('');
 
-  // 绑定点击事件（创建私聊）
+  // Bind click events (create private chat)
   document.querySelectorAll('.user-item').forEach(item => {
     item.addEventListener('click', () => {
       const userId = parseInt(item.dataset.userId);
@@ -388,36 +426,36 @@ function renderUserList() {
   });
 }
 
-// 选择房间
+// Select room
 function selectRoom(room) {
   currentRoom = room;
   currentRoomName.textContent = room.name;
-  roomSubtitle.textContent = room.type === 'private' ? '私聊' : '群聊';
+  roomSubtitle.textContent = room.type === 'private' ? i18n.t('room.privateChat') : i18n.t('chat.rooms');
 
   inputArea.style.display = 'flex';
 
-  // 重新渲染房间列表以应用 active 样式
+  // Re-render room list to apply active style
   renderRoomList();
 
-  // 移动端：选择房间后自动收起侧边栏
+  // Mobile: Auto-hide sidebar after selecting room
   if (window.innerWidth <= 768) {
     sidebar.classList.remove('show');
   }
 
-  // 加载消息（但不立即清除未读计数）
+  // Load messages (without immediately clearing unread count)
   socket.emit('loadMessages', { roomId: room.id, limit: 50, skipClearUnread: true });
 }
 
-// 清除当前房间的未读计数（当用户与内容交互时）
+// Clear unread count for current room (when user interacts with content)
 function clearCurrentRoomUnread() {
   if (currentRoom && unreadCounts[currentRoom.id]) {
     socket.emit('clearUnread', { roomId: currentRoom.id });
   }
 }
 
-// 创建私聊
+// Create private chat
 function createPrivateChat(targetUserId) {
-  // 先检查是否已有该用户的私聊房间
+  // Check if private chat room with this user already exists
   const existingRoom = rooms.find(r =>
     r.type === 'private' &&
     r.members &&
@@ -425,8 +463,8 @@ function createPrivateChat(targetUserId) {
   );
 
   if (existingRoom) {
-    // 直接选中已存在的房间，不创建重复房间
-    console.log(`已存在与用户 ${targetUserId} 的私聊房间，直接选中`);
+    // Select existing room, don't create duplicate
+    console.log(`Private chat room with user ${targetUserId} already exists, selecting it`);
     selectRoom(existingRoom);
     return;
   }
@@ -435,22 +473,22 @@ function createPrivateChat(targetUserId) {
   socket.emit('createPrivateChat', { targetUserId });
 }
 
-// 删除房间
+// Delete room
 function deleteRoom(roomId) {
   if (roomId === 'lobby') {
-    alert('不能删除大厅');
+    alert(i18n.t('room.cannotDeleteLobby'));
     return;
   }
 
   const room = rooms.find(r => r.id === roomId);
-  const roomName = room ? room.name : '对话';
+  const roomName = room ? room.name : '';
 
-  if (confirm(`确定要删除对话"${roomName}"吗？`)) {
+  if (confirm(i18n.tp('room.confirmDelete', { name: roomName }))) {
     socket.emit('deleteRoom', { roomId });
   }
 }
 
-// 置顶/取消置顶房间
+// Pin/unpin room
 function togglePinRoom(roomId) {
   const room = rooms.find(r => r.id === roomId);
   if (!room) return;
@@ -459,7 +497,7 @@ function togglePinRoom(roomId) {
   socket.emit('togglePinRoom', { roomId, pinned: newPinnedState });
 }
 
-// 发送消息
+// Send message
 function sendMessage() {
   const text = messageInput.value.trim();
 
@@ -473,11 +511,11 @@ function sendMessage() {
   messageInput.value = '';
   autoResizeTextarea();
 
-  // 移动端：发送消息后重置视窗缩放
+  // Mobile: Reset viewport zoom after sending message
   if (window.innerWidth <= 768) {
-    messageInput.blur(); // 先失去焦点
+    messageInput.blur(); // First lose focus
     setTimeout(() => {
-      // 强制重置 viewport
+      // Force reset viewport
       const viewport = document.querySelector('meta[name="viewport"]');
       viewport.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
     }, 100);
@@ -554,10 +592,10 @@ function handleSearch() {
   });
 }
 
-// 渲染搜索结果
+// Render search results
 function renderSearchResults(results) {
   if (results.length === 0) {
-    searchResults.innerHTML = '<div style="padding: 20px; text-align: center; color: #888;">未找到匹配的消息</div>';
+    searchResults.innerHTML = `<div style="padding: 20px; text-align: center; color: #888;">${i18n.t('search.noResults')}</div>`;
   } else {
     searchResults.innerHTML = results.map(result => {
       const query = searchInput.value.trim();
@@ -578,36 +616,36 @@ function renderSearchResults(results) {
   searchResults.classList.remove('hidden');
 }
 
-// 自动调整输入框高度
+// Auto-resize textarea height
 function autoResizeTextarea() {
   messageInput.style.height = 'auto';
   messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + 'px';
 }
 
-// 滚动到底部
+// Scroll to bottom
 function scrollToBottom() {
   setTimeout(() => {
     messageList.scrollTop = messageList.scrollHeight;
   }, 100);
 }
 
-// 更新连接状态
+// Update connection status
 function updateConnectionStatus(status) {
   connectionStatus.className = `connection-status ${status}`;
 
   const statusText = connectionStatus.querySelector('.status-text');
   if (status === 'connected') {
-    statusText.textContent = '已连接';
+    statusText.textContent = i18n.t('connection.connected');
   } else if (status === 'disconnected') {
-    statusText.textContent = '已断开';
+    statusText.textContent = i18n.t('connection.disconnected');
   } else {
-    statusText.textContent = '连接中...';
+    statusText.textContent = i18n.t('connection.connecting');
   }
 
-  // 显示状态提示
+  // Show status indicator
   connectionStatus.classList.add('show');
 
-  // 3秒后自动隐藏（仅在已连接状态）
+  // Auto-hide after 3 seconds (only when connected)
   if (status === 'connected') {
     setTimeout(() => {
       connectionStatus.classList.remove('show');
@@ -615,22 +653,22 @@ function updateConnectionStatus(status) {
   }
 }
 
-// 判断用户是否在线
+// Check if user is online
 function isUserOnline(user) {
   if (!user.last_seen) return false;
   const lastSeen = new Date(user.last_seen);
   const now = new Date();
-  return (now - lastSeen) < 5 * 60 * 1000; // 5 分钟内活跃
+  return (now - lastSeen) < 5 * 60 * 1000; // Active within 5 minutes
 }
 
-// 登出
+// Logout
 function logout() {
   localStorage.removeItem('chatToken');
   localStorage.removeItem('chatUser');
   window.location.href = '/index.html';
 }
 
-// 工具函数
+// Utility functions
 function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
@@ -647,13 +685,14 @@ function formatTime(timestamp) {
   const diffMs = now - date;
   const diffMins = Math.floor(diffMs / 60000);
 
-  if (diffMins < 1) return '刚刚';
-  if (diffMins < 60) return `${diffMins}分钟前`;
+  if (diffMins < 1) return i18n.t('time.justNow');
+  if (diffMins < 60) return i18n.tp('time.minutesAgo', { n: diffMins });
 
   const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours}小时前`;
+  if (diffHours < 24) return i18n.tp('time.hoursAgo', { n: diffHours });
 
-  return date.toLocaleDateString('zh-CN') + ' ' + date.toLocaleTimeString('zh-CN', {
+  const locale = i18n.currentLang === 'zh-CN' ? 'zh-CN' : 'en-US';
+  return date.toLocaleDateString(locale) + ' ' + date.toLocaleTimeString(locale, {
     hour: '2-digit',
     minute: '2-digit'
   });
@@ -671,7 +710,7 @@ function debounce(func, wait) {
   };
 }
 
-// @ 提及自动补全
+// @ Mention autocomplete
 let mentionDropdown = null;
 let mentionStartPos = null;
 let mentionQuery = '';
@@ -851,35 +890,35 @@ async function handleChangePassword() {
   const newPassword = newPasswordInput.value.trim();
   const confirmPassword = confirmPasswordInput.value.trim();
 
-  // 验证输入
+  // Validate input
   if (!currentPassword) {
-    passwordError.textContent = '请输入当前密码';
+    passwordError.textContent = i18n.t('error.passwordRequired');
     return;
   }
 
   if (!newPassword) {
-    passwordError.textContent = '请输入新密码';
+    passwordError.textContent = i18n.t('error.passwordRequired');
     return;
   }
 
   if (newPassword.length < 6) {
-    passwordError.textContent = '新密码至少需要6位字符';
+    passwordError.textContent = i18n.t('error.passwordTooShort');
     return;
   }
 
   if (newPassword !== confirmPassword) {
-    passwordError.textContent = '两次输入的新密码不一致';
+    passwordError.textContent = i18n.t('error.passwordMismatch');
     return;
   }
 
   if (currentPassword === newPassword) {
-    passwordError.textContent = '新密码不能与当前密码相同';
+    passwordError.textContent = i18n.t('error.passwordSame');
     return;
   }
 
-  // 禁用按钮防止重复提交
+  // Disable button to prevent duplicate submissions
   confirmPasswordChange.disabled = true;
-  confirmPasswordChange.textContent = '修改中...';
+  confirmPasswordChange.textContent = i18n.t('modal.changingPassword');
   passwordError.textContent = '';
 
   try {
@@ -898,28 +937,28 @@ async function handleChangePassword() {
     const result = await response.json();
 
     if (result.success) {
-      alert('密码修改成功！请使用新密码重新登录');
+      alert(i18n.t('success.passwordChanged'));
       logout();
     } else {
-      passwordError.textContent = result.error || '密码修改失败';
+      passwordError.textContent = result.error || i18n.t('error.changePasswordFailed');
     }
   } catch (error) {
-    console.error('修改密码失败:', error);
-    passwordError.textContent = '网络错误，请稍后重试';
+    console.error('Password change failed:', error);
+    passwordError.textContent = i18n.t('login.networkError');
   } finally {
     confirmPasswordChange.disabled = false;
-    confirmPasswordChange.textContent = '确认修改';
+    confirmPasswordChange.textContent = i18n.t('modal.confirm');
   }
 }
 
-// 点击模态框外部关闭
+// Click outside modal to close
 changePasswordModal.addEventListener('click', (e) => {
   if (e.target === changePasswordModal) {
     hideChangePasswordModal();
   }
 });
 
-// ESC 键关闭模态框
+// ESC key to close modal
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && changePasswordModal.classList.contains('show')) {
     hideChangePasswordModal();

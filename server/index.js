@@ -7,10 +7,10 @@ require('dotenv').config();
 const { initDatabase, userDb, roomDb, messageDb, unreadDb, getOrCreatePrivateRoom } = require('./db');
 const { authenticateUser, verifyToken, changePassword } = require('./auth');
 
-// 初始化数据库
+// Initialize database
 initDatabase();
 
-// 创建 Express 应用
+// Create Express application
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
@@ -20,25 +20,25 @@ const io = new Server(httpServer, {
   }
 });
 
-// 中间件
+// Middleware
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
-// 在线用户映射 { userId: socketId }
+// Online users mapping { userId: socketId }
 const onlineUsers = new Map();
 
-// Socket.io 连接处理
+// Socket.io connection handling
 io.on('connection', (socket) => {
-  console.log(`📱 新连接: ${socket.id}`);
+  console.log(`📱 New connection: ${socket.id}`);
 
   let currentUser = null;
 
-  // 登录事件
+  // Login event
   socket.on('login', async (data) => {
     const { username, password } = data;
 
     if (!username || !password) {
-      socket.emit('error', { message: '用户名和密码不能为空' });
+      socket.emit('error', { message: 'Username and password cannot be empty' });
       return;
     }
 
@@ -52,27 +52,27 @@ io.on('connection', (socket) => {
     currentUser = result.user;
     socket.userId = currentUser.id;
 
-    // 记录在线状态
+    // Record online status
     onlineUsers.set(currentUser.id, socket.id);
 
-    // 更新最后在线时间
+    // Update last seen time
     userDb.updateLastSeen.run(currentUser.id);
 
-    // 获取用户的所有房间
+    // Get user's all rooms
     const rooms = roomDb.getUserRooms.all(currentUser.id);
 
-    // 加入所有房间（Socket.io 房间）
+    // Join all rooms (Socket.io rooms)
     rooms.forEach(room => {
       socket.join(room.id);
     });
 
-    // 发送登录成功
+    // Send login success
     socket.emit('loginSuccess', {
       user: currentUser,
       token: result.token
     });
 
-    // 发送房间列表
+    // Send room list
     const roomsWithLastMessage = rooms.map(room => {
       const lastMessage = messageDb.getLastMessage.get(room.id);
       return {
@@ -83,67 +83,67 @@ io.on('connection', (socket) => {
 
     socket.emit('roomList', roomsWithLastMessage);
 
-    // 通知其他用户上线
+    // Notify other users that user is online
     io.emit('userOnline', {
       id: currentUser.id,
       username: currentUser.username,
       displayName: currentUser.displayName
     });
 
-    console.log(`✅ 用户登录: ${currentUser.username} (ID: ${currentUser.id})`);
+    console.log(`✅ User logged in: ${currentUser.username} (ID: ${currentUser.id})`);
   });
 
-  // Token 登录（自动登录）
+  // Token login (auto login)
   socket.on('loginWithToken', (data) => {
     const { token } = data;
 
     if (!token) {
-      socket.emit('loginError', { message: '无效的令牌' });
+      socket.emit('loginError', { message: 'Invalid token' });
       return;
     }
 
     const user = verifyToken(token);
 
     if (!user) {
-      socket.emit('loginError', { message: '令牌已过期，请重新登录' });
+      socket.emit('loginError', { message: 'Token expired, please login again' });
       return;
     }
 
     currentUser = user;
     socket.userId = user.id;
 
-    // 记录在线状态
+    // Record online status
     onlineUsers.set(user.id, socket.id);
 
-    // 更新最后在线时间
+    // Update last seen time
     userDb.updateLastSeen.run(user.id);
 
-    // 获取用户的所有房间
+    // Get user's all rooms
     const rooms = roomDb.getUserRooms.all(user.id);
 
-    // 确保大厅始终置顶
+    // Ensure lobby is always pinned at top
     const lobbyRoom = rooms.find(r => r.id === 'lobby');
     if (lobbyRoom && !lobbyRoom.pinned) {
       roomDb.pinRoom.run('lobby', user.id);
       lobbyRoom.pinned = 1;
     }
 
-    // 加入所有房间
+    // Join all rooms
     rooms.forEach(room => {
       socket.join(room.id);
     });
 
-    // 发送登录成功
+    // Send login success
     socket.emit('loginSuccess', { user });
 
-    // 加载未读计数
+    // Load unread counts
     const unreadCounts = unreadDb.getUserUnreadCounts.all(user.id);
     const unreadMap = {};
     unreadCounts.forEach(item => {
       unreadMap[item.room_id] = item.count;
     });
 
-    // 发送房间列表（包含未读计数）
+    // Send room list (with unread counts)
     const roomsWithLastMessage = rooms.map(room => {
       const lastMessage = messageDb.getLastMessage.get(room.id);
       return {
@@ -155,37 +155,37 @@ io.on('connection', (socket) => {
 
     socket.emit('roomList', roomsWithLastMessage);
 
-    // 发送总未读数
+    // Send total unread count
     const totalUnread = unreadDb.getTotalUnreadCount.get(user.id);
     socket.emit('totalUnreadCount', { total: totalUnread?.total || 0 });
 
-    // 通知其他用户上线
+    // Notify other users that user is online
     io.emit('userOnline', {
       id: user.id,
       username: user.username,
       displayName: user.displayName
     });
 
-    console.log(`✅ 用户自动登录: ${user.username} (ID: ${user.id})`);
+    console.log(`✅ User auto-logged in: ${user.username} (ID: ${user.id})`);
   });
 
-  // 加载房间消息
+  // Load room messages
   socket.on('loadMessages', (data) => {
     if (!currentUser) {
-      socket.emit('error', { message: '请先登录' });
+      socket.emit('error', { message: 'Please login first' });
       return;
     }
 
     const { roomId, limit = 50, before, skipClearUnread } = data;
 
-    // 只有在不跳过清除未读时才清除（默认清除）
+    // Only clear unread count when not skipping (default: clear)
     if (!skipClearUnread) {
       unreadDb.clearUnreadCount.run(currentUser.id, roomId);
 
-      // 通知客户端未读计数已清除
+      // Notify client that unread count is cleared
       socket.emit('unreadCountUpdate', { roomId, count: 0 });
 
-      // 更新总未读数
+      // Update total unread count
       const totalUnread = unreadDb.getTotalUnreadCount.get(currentUser.id);
       socket.emit('totalUnreadCount', { total: totalUnread?.total || 0 });
     }
@@ -199,36 +199,36 @@ io.on('connection', (socket) => {
 
     socket.emit('messages', {
       roomId,
-      messages: messages.reverse() // 按时间正序
+      messages: messages.reverse() // Chronological order
     });
   });
 
-  // 清除未读计数（用户交互时触发）
+  // Clear unread count (triggered by user interaction)
   socket.on('clearUnread', (data) => {
     if (!currentUser) {
-      socket.emit('error', { message: '请先登录' });
+      socket.emit('error', { message: 'Please login first' });
       return;
     }
 
     const { roomId } = data;
 
-    // 清除该房间的未读计数
+    // Clear unread count for this room
     unreadDb.clearUnreadCount.run(currentUser.id, roomId);
 
-    // 通知客户端未读计数已清除
+    // Notify client that unread count is cleared
     socket.emit('unreadCountUpdate', { roomId, count: 0 });
 
-    // 更新总未读数
+    // Update total unread count
     const totalUnread = unreadDb.getTotalUnreadCount.get(currentUser.id);
     socket.emit('totalUnreadCount', { total: totalUnread?.total || 0 });
 
-    console.log(`🔔 用户 ${currentUser.username} 清除了房间 ${roomId} 的未读计数`);
+    console.log(`🔔 User ${currentUser.username} cleared unread count for room ${roomId}`);
   });
 
-  // 发送消息
+  // Send message
   socket.on('sendMessage', (data) => {
     if (!currentUser) {
-      socket.emit('error', { message: '请先登录' });
+      socket.emit('error', { message: 'Please login first' });
       return;
     }
 
@@ -238,21 +238,21 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // 更新用户在线时间
+    // Update user last seen time
     userDb.updateLastSeen.run(currentUser.id);
 
-    // 检查用户是否在房间中
+    // Check if user is in room
     const room = roomDb.findById.get(roomId);
     if (!room) {
-      socket.emit('error', { message: '房间不存在' });
+      socket.emit('error', { message: 'Room does not exist' });
       return;
     }
 
-    // 保存消息到数据库
+    // Save message to database
     const result = messageDb.create.run(roomId, currentUser.id, text.trim());
     const messageId = result.lastInsertRowid;
 
-    // 构建消息对象
+    // Build message object
     const message = {
       id: messageId,
       room_id: roomId,
@@ -264,31 +264,31 @@ io.on('connection', (socket) => {
       created_at: new Date().toISOString()
     };
 
-    // 广播到房间
+    // Broadcast to room
     io.to(roomId).emit('message', message);
 
-    // 获取当前房间成员
+    // Get current room members
     const members = roomDb.getMembers.all(roomId);
     const memberIds = new Set(members.map(m => m.id));
 
-    // 如果是私聊房间，检查是否需要重新添加已删除的成员
+    // If private room, check if need to re-add deleted members
     if (room.type === 'private') {
       const match = roomId.match(/^private_(\d+)_(\d+)$/);
       if (match) {
         const [_, id1Str, id2Str] = match;
         const expectedUserIds = [parseInt(id1Str), parseInt(id2Str)];
 
-        // 找出应该在房间但不在成员列表中的用户（说明被删除了）
+        // Find users that should be in room but not in member list (means they were deleted)
         expectedUserIds.forEach(userId => {
           if (!memberIds.has(userId) && userId !== currentUser.id) {
-            // 重新添加成员
+            // Re-add member
             roomDb.addMember.run(roomId, userId);
-            console.log(`🔄 自动重新添加用户 ${userId} 到私聊房间 ${roomId}`);
+            console.log(`🔄 Auto re-added user ${userId} to private room ${roomId}`);
 
-            // 增加未读计数
+            // Increment unread count
             unreadDb.incrementUnreadCount.run(userId, roomId, messageId);
 
-            // 如果用户在线，推送新房间和未读计数通知
+            // If user is online, push new room and unread count notification
             const targetSocketId = onlineUsers.get(userId);
             if (targetSocketId) {
               const targetSocket = io.sockets.sockets.get(targetSocketId);
@@ -296,7 +296,7 @@ io.on('connection', (socket) => {
                 targetSocket.join(roomId);
               }
 
-              // 重新获取完整的房间信息（包含 pinned 字段）
+              // Re-fetch complete room info (including pinned field)
               const userRooms = roomDb.getUserRooms.all(userId);
               const updatedRoom = userRooms.find(r => r.id === roomId);
               const roomWithDetails = {
@@ -306,38 +306,38 @@ io.on('connection', (socket) => {
                 unreadCount: 1
               };
 
-              // 推送新房间通知
+              // Push new room notification
               io.to(targetSocketId).emit('newRoom', roomWithDetails);
 
-              // 推送未读计数
+              // Push unread count
               io.to(targetSocketId).emit('unreadCountUpdate', {
                 roomId: roomId,
                 count: 1
               });
 
-              // 推送总未读数
+              // Push total unread count
               const totalUnread = unreadDb.getTotalUnreadCount.get(userId);
               io.to(targetSocketId).emit('totalUnreadCount', {
                 total: totalUnread?.total || 0
               });
 
-              console.log(`📩 已通知用户 ${userId} 新的私聊消息`);
+              console.log(`📩 Notified user ${userId} of new private message`);
             }
           }
         });
       }
     }
 
-    // 为现有成员增加未读计数（排除发送者和刚重新添加的成员）
+    // Increment unread count for existing members (excluding sender and newly re-added members)
     members.forEach(member => {
       if (member.id !== currentUser.id) {
-        // 增加未读计数
+        // Increment unread count
         unreadDb.incrementUnreadCount.run(member.id, roomId, messageId);
 
-        // 如果用户在线，推送未读计数更新
+        // If user is online, push unread count update
         const targetSocketId = onlineUsers.get(member.id);
         if (targetSocketId) {
-          // 查询最新的未读计数
+          // Query latest unread count
           const unreadResult = unreadDb.getRoomUnreadCount.get(member.id, roomId);
           const newCount = unreadResult ? unreadResult.count : 1;
 
@@ -346,7 +346,7 @@ io.on('connection', (socket) => {
             count: newCount
           });
 
-          // 同时推送总未读数更新
+          // Also push total unread count update
           const totalUnread = unreadDb.getTotalUnreadCount.get(member.id);
           io.to(targetSocketId).emit('totalUnreadCount', {
             total: totalUnread?.total || 0
@@ -355,7 +355,7 @@ io.on('connection', (socket) => {
       }
     });
 
-    // 广播在线用户更新（因为 last_seen 改变了）
+    // Broadcast online user update (because last_seen changed)
     io.emit('userStatusUpdate', {
       id: currentUser.id,
       username: currentUser.username,
@@ -365,27 +365,27 @@ io.on('connection', (socket) => {
     console.log(`💬 [${room.name}] ${currentUser.username}: ${text.substring(0, 50)}...`);
   });
 
-  // 创建私聊
+  // Create private chat
   socket.on('createPrivateChat', (data) => {
     if (!currentUser) {
-      socket.emit('error', { message: '请先登录' });
+      socket.emit('error', { message: 'Please login first' });
       return;
     }
 
     const { targetUserId } = data;
 
     if (targetUserId === currentUser.id) {
-      socket.emit('error', { message: '不能与自己私聊' });
+      socket.emit('error', { message: 'Cannot chat with yourself' });
       return;
     }
 
-    // 创建或获取私聊房间
+    // Create or get private room
     const room = getOrCreatePrivateRoom(currentUser.id, targetUserId);
 
-    // 加入房间
+    // Join room
     socket.join(room.id);
 
-    // 如果对方在线，让对方也加入
+    // If target user is online, have them join too
     const targetSocketId = onlineUsers.get(targetUserId);
     if (targetSocketId) {
       const targetSocket = io.sockets.sockets.get(targetSocketId);
@@ -393,13 +393,13 @@ io.on('connection', (socket) => {
         targetSocket.join(room.id);
       }
 
-      // 检查对方的房间列表中是否已有此房间
+      // Check if target user already has this room in their list
       const targetRooms = roomDb.getUserRooms.all(targetUserId);
       const targetHasRoom = targetRooms.some(r => r.id === room.id);
 
-      // 只有对方没有此房间时才通知（避免重复）
+      // Only notify target if they don't have this room (avoid duplicates)
       if (!targetHasRoom) {
-        // 查询对方的房间信息（包含 pinned 字段）
+        // Query target's room info (including pinned field)
         const refreshedTargetRooms = roomDb.getUserRooms.all(targetUserId);
         const targetRoomData = refreshedTargetRooms.find(r => r.id === room.id);
 
@@ -412,22 +412,22 @@ io.on('connection', (socket) => {
       }
     }
 
-    // 返回房间信息给当前用户
+    // Return room info to current user
     socket.emit('roomCreated', room);
 
-    console.log(`🔒 私聊创建/重新加入: ${currentUser.username} <-> User#${targetUserId}`);
+    console.log(`🔒 Private chat created/rejoined: ${currentUser.username} <-> User#${targetUserId}`);
   });
 
-  // 获取在线用户列表
+  // Get online users list
   socket.on('getOnlineUsers', () => {
     const users = userDb.getOnline.all();
     socket.emit('onlineUsers', users);
   });
 
-  // 搜索消息
+  // Search messages
   socket.on('searchMessages', (data) => {
     if (!currentUser) {
-      socket.emit('error', { message: '请先登录' });
+      socket.emit('error', { message: 'Please login first' });
       return;
     }
 
@@ -447,84 +447,84 @@ io.on('connection', (socket) => {
     socket.emit('searchResults', results);
   });
 
-  // 心跳保活
+  // Keep alive heartbeat
   socket.on('keepAlive', () => {
     if (currentUser) {
       userDb.updateLastSeen.run(currentUser.id);
     }
   });
 
-  // 删除房间
+  // Delete room
   socket.on('deleteRoom', (data) => {
     if (!currentUser) {
-      socket.emit('error', { message: '请先登录' });
+      socket.emit('error', { message: 'Please login first' });
       return;
     }
 
     const { roomId } = data;
 
-    // 不能删除大厅
+    // Cannot delete lobby
     if (roomId === 'lobby') {
-      socket.emit('error', { message: '不能删除大厅' });
+      socket.emit('error', { message: 'Cannot delete lobby' });
       return;
     }
 
-    // 检查房间是否存在
+    // Check if room exists
     const room = roomDb.findById.get(roomId);
     if (!room) {
-      socket.emit('error', { message: '房间不存在' });
+      socket.emit('error', { message: 'Room does not exist' });
       return;
     }
 
-    // 从房间中移除当前用户
+    // Remove current user from room
     roomDb.removeMember.run(roomId, currentUser.id);
 
-    // 离开 Socket.io 房间
+    // Leave Socket.io room
     socket.leave(roomId);
 
-    // 通知当前用户删除成功
+    // Notify current user of successful deletion
     socket.emit('roomDeleted', { roomId });
 
-    // 私聊房间：只移除成员关系，不删除房间本身（保留历史消息）
+    // Private room: Only remove member relationship, don't delete room itself (keep message history)
     if (room.type === 'private') {
-      console.log(`👋 用户 ${currentUser.username} 删除了私聊房间 ${roomId}（房间保留，可通过消息重新激活）`);
+      console.log(`👋 User ${currentUser.username} deleted private room ${roomId} (room preserved, can be reactivated via messages)`);
     } else {
-      // 群聊房间：检查是否还有其他成员
+      // Group room: Check if there are other members
       const remainingMembers = roomDb.getRoomMembers.all(roomId);
 
-      // 如果群聊房间没有成员了，删除房间
+      // If group room has no members left, delete room
       if (remainingMembers.length === 0) {
         roomDb.delete.run(roomId);
-        console.log(`🗑️ 群聊房间已删除: ${room.name} (ID: ${roomId})`);
+        console.log(`🗑️ Group room deleted: ${room.name} (ID: ${roomId})`);
       } else {
-        console.log(`👋 用户 ${currentUser.username} 离开群聊房间: ${room.name}`);
+        console.log(`👋 User ${currentUser.username} left group room: ${room.name}`);
       }
     }
   });
 
-  // 置顶/取消置顶房间
+  // Pin/unpin room
   socket.on('togglePinRoom', (data) => {
     if (!currentUser) {
-      socket.emit('error', { message: '请先登录' });
+      socket.emit('error', { message: 'Please login first' });
       return;
     }
 
     const { roomId, pinned } = data;
 
-    // 大厅不允许手动取消置顶
+    // Lobby cannot be manually unpinned
     if (roomId === 'lobby' && !pinned) {
-      socket.emit('error', { message: '大厅始终置顶，无法取消' });
+      socket.emit('error', { message: 'Lobby is always pinned, cannot be unpinned' });
       return;
     }
 
-    // 更新数据库
+    // Update database
     if (pinned) {
       roomDb.pinRoom.run(roomId, currentUser.id);
     } else {
       roomDb.unpinRoom.run(roomId, currentUser.id);
     }
 
-    // 通知客户端更新房间列表
+    // Notify client to update room list
     const rooms = roomDb.getUserRooms.all(currentUser.id);
     const roomsWithLastMessage = rooms.map(room => {
       const lastMessage = messageDb.getLastMessage.get(room.id);
@@ -533,36 +533,36 @@ io.on('connection', (socket) => {
 
     socket.emit('roomList', roomsWithLastMessage);
 
-    console.log(`📌 用户 ${currentUser.username} ${pinned ? '置顶' : '取消置顶'}房间: ${roomId}`);
+    console.log(`📌 User ${currentUser.username} ${pinned ? 'pinned' : 'unpinned'} room: ${roomId}`);
   });
 
-  // 断开连接
+  // Disconnect
   socket.on('disconnect', () => {
     if (currentUser) {
       onlineUsers.delete(currentUser.id);
 
-      // 通知其他用户下线
+      // Notify other users of offline status
       io.emit('userOffline', {
         id: currentUser.id,
         username: currentUser.username
       });
 
-      console.log(`❌ 用户离线: ${currentUser.username} (ID: ${currentUser.id})`);
+      console.log(`❌ User offline: ${currentUser.username} (ID: ${currentUser.id})`);
     }
 
-    console.log(`📱 连接断开: ${socket.id}`);
+    console.log(`📱 Connection disconnected: ${socket.id}`);
   });
 });
 
-// HTTP API 路由（用于 Bot 或其他客户端）
+// HTTP API routes (for Bot or other clients)
 app.post('/api/login', async (req, res) => {
   const { username, password, isBot } = req.body;
 
-  // 验证必填参数
+  // Validate required parameters
   if (!username || !password) {
     return res.status(400).json({
       success: false,
-      error: '用户名和密码不能为空'
+      error: 'Username and password cannot be empty'
     });
   }
 
@@ -575,7 +575,7 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// 修改密码 API
+// Change password API
 app.post('/api/change-password', async (req, res) => {
   const authHeader = req.headers.authorization;
   const token = authHeader ? authHeader.replace('Bearer ', '') : '';
@@ -584,17 +584,17 @@ app.post('/api/change-password', async (req, res) => {
   if (!user) {
     return res.status(401).json({
       success: false,
-      error: '未授权，请先登录'
+      error: 'Unauthorized, please login first'
     });
   }
 
   const { currentPassword, newPassword } = req.body;
 
-  // 验证必填参数
+  // Validate required parameters
   if (!currentPassword || !newPassword) {
     return res.status(400).json({
       success: false,
-      error: '请填写完整信息'
+      error: 'Please fill in all required fields'
     });
   }
 
@@ -613,7 +613,7 @@ app.get('/api/rooms', (req, res) => {
   const user = verifyToken(token);
 
   if (!user) {
-    return res.status(401).json({ error: '未授权' });
+    return res.status(401).json({ error: 'Unauthorized' });
   }
 
   const rooms = roomDb.getUserRooms.all(user.id);
@@ -626,7 +626,7 @@ app.get('/api/messages/:roomId', (req, res) => {
   const user = verifyToken(token);
 
   if (!user) {
-    return res.status(401).json({ error: '未授权' });
+    return res.status(401).json({ error: 'Unauthorized' });
   }
 
   const { roomId } = req.params;
@@ -636,16 +636,16 @@ app.get('/api/messages/:roomId', (req, res) => {
   res.json(messages.reverse());
 });
 
-// 启动服务器
+// Start server
 const PORT = process.env.PORT || 3030;
 const HOST = process.env.HOST || '0.0.0.0';
 
 httpServer.listen(PORT, HOST, () => {
   console.log('\n========================================');
-  console.log('🚀 简单局域网聊天系统已启动');
+  console.log('🚀 Simple LAN Chat System Started');
   console.log('========================================');
-  console.log(`\n📡 本地访问: http://localhost:${PORT}`);
-  console.log(`📡 局域网访问: http://YOUR_IP:${PORT}`);
-  console.log('\n💡 提示: 使用 ipconfig (Windows) 或 ifconfig (Mac/Linux) 查看 IP 地址');
+  console.log(`\n📡 Local access: http://localhost:${PORT}`);
+  console.log(`📡 LAN access: http://YOUR_IP:${PORT}`);
+  console.log('\n💡 Tip: Use ipconfig (Windows) or ifconfig (Mac/Linux) to check IP address');
   console.log('\n========================================\n');
 });

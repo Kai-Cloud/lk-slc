@@ -3,56 +3,56 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const { userDb, sessionDb, roomDb } = require('./db');
 
-// JWT 密钥（生产环境应从环境变量读取）
+// JWT secret (should be read from environment variable in production)
 const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
 
-// 注册或登录用户
+// Register or login user
 async function authenticateUser(username, password, isBot = false) {
   try {
-    // 验证必填参数
+    // Validate required parameters
     if (!username || !password) {
-      return { success: false, error: '用户名和密码不能为空' };
+      return { success: false, error: 'Username and password required' };
     }
 
-    // 查找用户
+    // Find user
     let user = userDb.findByUsername.get(username);
 
     if (user) {
-      // 用户存在，验证密码
+      // User exists, verify password
       const isValid = await bcrypt.compare(password, user.password_hash);
       if (!isValid) {
-        return { success: false, error: '密码错误' };
+        return { success: false, error: 'Invalid password' };
       }
 
-      // 更新最后在线时间
+      // Update last seen time
       userDb.updateLastSeen.run(user.id);
 
     } else {
-      // 用户不存在，自动注册
+      // User doesn't exist, auto-register
       const passwordHash = await bcrypt.hash(password, 10);
       const result = userDb.create.run(
         username,
         passwordHash,
-        username, // 默认显示名 = 用户名
+        username, // Default display name = username
         isBot ? 1 : 0
       );
 
       user = userDb.findById.get(result.lastInsertRowid);
 
-      // 自动加入大厅
+      // Auto-join lobby
       roomDb.addMember.run('lobby', user.id);
 
-      console.log(`✅ 新用户注册: ${username} (ID: ${user.id})`);
+      console.log(`✅ New user registered: ${username} (ID: ${user.id})`);
     }
 
-    // 生成 JWT Token
+    // Generate JWT Token
     const token = jwt.sign(
       { userId: user.id, username: user.username },
       JWT_SECRET,
       { expiresIn: '30d' }
     );
 
-    // 保存到数据库
+    // Save to database
     sessionDb.create.run(token, user.id);
 
     return {
@@ -67,21 +67,21 @@ async function authenticateUser(username, password, isBot = false) {
     };
 
   } catch (error) {
-    console.error('认证错误:', error);
-    return { success: false, error: '认证失败: ' + error.message };
+    console.error('Authentication error:', error);
+    return { success: false, error: 'Authentication failed: ' + error.message };
   }
 }
 
-// 验证 Token
+// Verify Token
 function verifyToken(token) {
   try {
-    // 检查数据库中的会话
+    // Check session in database
     const session = sessionDb.findByToken.get(token);
     if (!session) {
       return null;
     }
 
-    // 验证 JWT
+    // Verify JWT
     const decoded = jwt.verify(token, JWT_SECRET);
 
     return {
@@ -96,7 +96,7 @@ function verifyToken(token) {
   }
 }
 
-// 登出
+// Logout
 function logout(token) {
   try {
     sessionDb.delete.run(token);
@@ -106,69 +106,69 @@ function logout(token) {
   }
 }
 
-// 清理过期会话
+// Clean up expired sessions
 function cleanupExpiredSessions() {
   try {
     const result = sessionDb.deleteExpired.run();
     if (result.changes > 0) {
-      console.log(`🧹 清理了 ${result.changes} 个过期会话`);
+      console.log(`🧹 Cleaned up ${result.changes} expired sessions`);
     }
   } catch (error) {
-    console.error('清理会话失败:', error);
+    console.error('Session cleanup failed:', error);
   }
 }
 
-// 修改密码
+// Change password
 async function changePassword(userId, currentPassword, newPassword) {
   try {
-    // 验证必填参数
+    // Validate required parameters
     if (!userId || !currentPassword || !newPassword) {
-      return { success: false, error: '参数不完整' };
+      return { success: false, error: 'Incomplete parameters' };
     }
 
-    // 验证新密码长度
+    // Validate new password length
     if (newPassword.length < 6) {
-      return { success: false, error: '新密码至少需要6位字符' };
+      return { success: false, error: 'New password must be at least 6 characters' };
     }
 
-    // 查找用户
+    // Find user
     const user = userDb.findById.get(userId);
     if (!user) {
-      return { success: false, error: '用户不存在' };
+      return { success: false, error: 'User not found' };
     }
 
-    // 验证当前密码
+    // Verify current password
     const isValid = await bcrypt.compare(currentPassword, user.password_hash);
     if (!isValid) {
-      return { success: false, error: '当前密码错误' };
+      return { success: false, error: 'Current password is incorrect' };
     }
 
-    // 检查新密码是否与旧密码相同
+    // Check if new password is same as old password
     const isSame = await bcrypt.compare(newPassword, user.password_hash);
     if (isSame) {
-      return { success: false, error: '新密码不能与当前密码相同' };
+      return { success: false, error: 'New password cannot be the same as current password' };
     }
 
-    // 生成新的密码哈希
+    // Generate new password hash
     const newPasswordHash = await bcrypt.hash(newPassword, 10);
 
-    // 更新密码
+    // Update password
     userDb.updatePassword.run(newPasswordHash, userId);
 
-    // 删除该用户的所有会话（强制重新登录）
+    // Delete all sessions for this user (force re-login)
     sessionDb.deleteByUserId.run(userId);
 
-    console.log(`✅ 用户 ${user.username} (ID: ${userId}) 修改密码成功`);
+    console.log(`✅ User ${user.username} (ID: ${userId}) changed password successfully`);
 
     return { success: true };
 
   } catch (error) {
-    console.error('修改密码错误:', error);
-    return { success: false, error: '修改密码失败: ' + error.message };
+    console.error('Change password error:', error);
+    return { success: false, error: 'Failed to change password: ' + error.message };
   }
 }
 
-// 定期清理过期会话（每小时一次）
+// Periodically clean up expired sessions (once per hour)
 setInterval(cleanupExpiredSessions, 60 * 60 * 1000);
 
 module.exports = {

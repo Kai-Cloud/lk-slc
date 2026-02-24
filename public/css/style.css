@@ -872,3 +872,44 @@ body {
 .btn-secondary:hover {
   background: #e0e0e0;
 }
+
+/* Language Switcher */
+.language-switcher {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+}
+
+.language-select {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: white;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.language-select:hover {
+  border-color: #667eea;
+}
+
+.language-select:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .language-switcher {
+    top: 10px;
+    right: 10px;
+  }
+
+  .language-select {
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+}
