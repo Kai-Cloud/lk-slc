@@ -178,6 +178,7 @@ body {
   font-weight: 500;
   color: #333;
   margin-bottom: 4px;
+  transition: font-weight 0.2s, color 0.2s;
 }
 
 .room-item-preview {
@@ -186,6 +187,7 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition: font-weight 0.2s, color 0.2s;
 }
 
 .room-delete-btn {

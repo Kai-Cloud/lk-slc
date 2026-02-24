@@ -59,6 +59,13 @@ function initChat() {
   sendBtn.addEventListener('click', sendMessage);
   messageInput.addEventListener('keydown', handleMessageInputKeydown);
   messageInput.addEventListener('input', handleMessageInput);
+
+  // 清除未读：当用户聚焦输入框时
+  messageInput.addEventListener('focus', clearCurrentRoomUnread);
+
+  // 清除未读：当用户点击消息列表时
+  messageList.addEventListener('click', clearCurrentRoomUnread);
+
   searchBtn.addEventListener('click', () => {
     searchBar.classList.toggle('hidden');
     if (!searchBar.classList.contains('hidden')) {
@@ -352,7 +359,6 @@ function selectRoom(room) {
   roomSubtitle.textContent = room.type === 'private' ? '私聊' : '群聊';
 
   inputArea.style.display = 'flex';
-  messageInput.focus();
 
   // 重新渲染房间列表以应用 active 样式
   renderRoomList();
@@ -362,8 +368,15 @@ function selectRoom(room) {
     sidebar.classList.remove('show');
   }
 
-  // 加载消息
-  socket.emit('loadMessages', { roomId: room.id, limit: 50 });
+  // 加载消息（但不立即清除未读计数）
+  socket.emit('loadMessages', { roomId: room.id, limit: 50, skipClearUnread: true });
+}
+
+// 清除当前房间的未读计数（当用户与内容交互时）
+function clearCurrentRoomUnread() {
+  if (currentRoom && unreadCounts[currentRoom.id]) {
+    socket.emit('clearUnread', { roomId: currentRoom.id });
+  }
 }
 
 // 创建私聊

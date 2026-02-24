@@ -169,10 +169,19 @@ io.on('connection', (socket) => {
       return;
     }
 
-    const { roomId, limit = 50, before } = data;
+    const { roomId, limit = 50, before, skipClearUnread } = data;
 
-    // 清除该房间的未读计数
-    unreadDb.clearUnreadCount.run(currentUser.id, roomId);
+    // 只有在不跳过清除未读时才清除（默认清除）
+    if (!skipClearUnread) {
+      unreadDb.clearUnreadCount.run(currentUser.id, roomId);
+
+      // 通知客户端未读计数已清除
+      socket.emit('unreadCountUpdate', { roomId, count: 0 });
+
+      // 更新总未读数
+      const totalUnread = unreadDb.getTotalUnreadCount.get(currentUser.id);
+      socket.emit('totalUnreadCount', { total: totalUnread?.total || 0 });
+    }
 
     let messages;
     if (before) {
@@ -185,6 +194,19 @@ io.on('connection', (socket) => {
       roomId,
       messages: messages.reverse() // 按时间正序
     });
+  });
+
+  // 清除未读计数（用户交互时触发）
+  socket.on('clearUnread', (data) => {
+    if (!currentUser) {
+      socket.emit('error', { message: '请先登录' });
+      return;
+    }
+
+    const { roomId } = data;
+
+    // 清除该房间的未读计数
+    unreadDb.clearUnreadCount.run(currentUser.id, roomId);
 
     // 通知客户端未读计数已清除
     socket.emit('unreadCountUpdate', { roomId, count: 0 });
@@ -192,6 +214,8 @@ io.on('connection', (socket) => {
     // 更新总未读数
     const totalUnread = unreadDb.getTotalUnreadCount.get(currentUser.id);
     socket.emit('totalUnreadCount', { total: totalUnread?.total || 0 });
+
+    console.log(`🔔 用户 ${currentUser.username} 清除了房间 ${roomId} 的未读计数`);
   });
 
   // 发送消息
