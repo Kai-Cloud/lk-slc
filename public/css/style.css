@@ -722,11 +722,17 @@ body {
 
 /* @ Mention highlighting in messages */
 .message-bubble .mention {
-  color: #667eea;
+  color: #ff9500;
   font-weight: 600;
-  background: rgba(102, 126, 234, 0.1);
+  background: rgba(255, 149, 0, 0.15);
   padding: 2px 4px;
   border-radius: 4px;
+}
+
+/* @ Mention in own messages (white background for better visibility) */
+.message.own .message-bubble .mention {
+  color: #ff9500;
+  background: rgba(255, 255, 255, 0.25);
 }
 
 /* 模态框 */
