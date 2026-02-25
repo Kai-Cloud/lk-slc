@@ -1056,7 +1056,10 @@ function showGameLobby() {
 
   // Create or get game lobby container (as sibling to messageList, not child)
   let gameLobbyContainer = document.getElementById('gameLobbyContainer');
+  let isFirstTime = false;
+
   if (!gameLobbyContainer) {
+    isFirstTime = true;
     gameLobbyContainer = document.createElement('div');
     gameLobbyContainer.id = 'gameLobbyContainer';
     gameLobbyContainer.className = 'game-lobby-container';
@@ -1065,64 +1068,66 @@ function showGameLobby() {
 
   gameLobbyContainer.style.display = 'flex';
 
-  // Inject game lobby grid
-  gameLobbyContainer.innerHTML = `
-    <div class="game-lobby-header">
-      <h2>🎮 游戏大厅 / Game Lobby</h2>
-      <p>选择一个游戏开始挑战 / Choose a game to start</p>
-    </div>
-
-    <div class="game-grid">
-      <div class="game-card" data-game="sliding-puzzle">
-        <div class="game-icon">🧩</div>
-        <h3>数字华容道</h3>
-        <p>9 关卡 · 滑块解谜</p>
+  // Only inject HTML on first creation to avoid re-creating iframes
+  if (isFirstTime) {
+    gameLobbyContainer.innerHTML = `
+      <div class="game-lobby-header">
+        <h2>🎮 游戏大厅 / Game Lobby</h2>
+        <p>选择一个游戏开始挑战 / Choose a game to start</p>
       </div>
 
-      <div class="game-card" data-game="memory-game">
-        <div class="game-icon">🃏</div>
-        <h3>记忆翻牌</h3>
-        <p>9 关卡 · 配对记忆</p>
+      <div class="game-grid">
+        <div class="game-card" data-game="sliding-puzzle">
+          <div class="game-icon">🧩</div>
+          <h3>数字华容道</h3>
+          <p>9 关卡 · 滑块解谜</p>
+        </div>
+
+        <div class="game-card" data-game="memory-game">
+          <div class="game-icon">🃏</div>
+          <h3>记忆翻牌</h3>
+          <p>9 关卡 · 配对记忆</p>
+        </div>
+
+        <div class="game-card" data-game="math-challenge">
+          <div class="game-icon">🔢</div>
+          <h3>速算挑战</h3>
+          <p>9 关卡 · 限时计算</p>
+        </div>
+
+        <div class="game-card" data-game="poetry-game">
+          <div class="game-icon">📖</div>
+          <h3>古诗背诵</h3>
+          <p>13 首 · 小学必背</p>
+        </div>
       </div>
 
-      <div class="game-card" data-game="math-challenge">
-        <div class="game-icon">🔢</div>
-        <h3>速算挑战</h3>
-        <p>9 关卡 · 限时计算</p>
+      <div id="gamePlayerFrame" style="display:none;">
+        <button class="btn-back-to-lobby">← 返回游戏大厅</button>
+        <iframe id="gameIframe" src="" frameborder="0"></iframe>
       </div>
+    `;
 
-      <div class="game-card" data-game="poetry-game">
-        <div class="game-icon">📖</div>
-        <h3>古诗背诵</h3>
-        <p>13 首 · 小学必背</p>
-      </div>
-    </div>
-
-    <div id="gamePlayerFrame" style="display:none;">
-      <button class="btn-back-to-lobby">← 返回游戏大厅</button>
-      <iframe id="gameIframe" src="" frameborder="0"></iframe>
-    </div>
-  `;
-
-  // Attach click handlers
-  document.querySelectorAll('.game-card').forEach(card => {
-    card.addEventListener('click', () => {
-      launchGame(card.dataset.game);
+    // Attach click handlers (only once)
+    document.querySelectorAll('.game-card').forEach(card => {
+      card.addEventListener('click', () => {
+        launchGame(card.dataset.game);
+      });
     });
-  });
 
-  // Back button handler
-  const backBtn = document.querySelector('.btn-back-to-lobby');
-  if (backBtn) {
-    backBtn.addEventListener('click', () => {
-      const gameLobbyHeader = document.querySelector('.game-lobby-header');
-      const gameGrid = document.querySelector('.game-grid');
-      const gamePlayerFrame = document.getElementById('gamePlayerFrame');
+    // Back button handler (only once)
+    const backBtn = document.querySelector('.btn-back-to-lobby');
+    if (backBtn) {
+      backBtn.addEventListener('click', () => {
+        const gameLobbyHeader = document.querySelector('.game-lobby-header');
+        const gameGrid = document.querySelector('.game-grid');
+        const gamePlayerFrame = document.getElementById('gamePlayerFrame');
 
-      if (gamePlayerFrame) gamePlayerFrame.style.display = 'none';
-      if (gameLobbyHeader) gameLobbyHeader.style.display = 'block';
-      if (gameGrid) gameGrid.style.display = 'grid';
-    });
+        if (gamePlayerFrame) gamePlayerFrame.style.display = 'none';
+        if (gameLobbyHeader) gameLobbyHeader.style.display = 'block';
+        if (gameGrid) gameGrid.style.display = 'grid';
+      });
+    }
   }
 }
 
@@ -1159,8 +1164,17 @@ window.addEventListener('message', (event) => {
   const { type, game, level, stars, moves, timeSeconds } = event.data;
 
   if (type === 'requestGameProgress') {
-    // Game is requesting its progress data
-    socket.emit('getGameProgress', { gameName: game });
+    // Game is requesting its progress data - now handled by gameReady event
+    // Just send cached data if available for immediate display
+    if (window.__cachedGameProgress && window.__cachedGameProgress[game]) {
+      const iframe = document.getElementById('gameIframe');
+      if (iframe && iframe.contentWindow) {
+        iframe.contentWindow.postMessage({
+          type: 'loadProgress',
+          progress: window.__cachedGameProgress[game]
+        }, '*');
+      }
+    }
   }
   else if (type === 'saveGameProgress') {
     // Game completed a level, save to server
