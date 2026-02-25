@@ -407,7 +407,8 @@ function renderRoomList() {
 
 // 渲染用户列表
 function renderUserList() {
-  userList.innerHTML = onlineUsers
+  // Add real users
+  const userItems = onlineUsers
     .filter(u => u.id !== currentUser.id)
     .map(user => `
       <div class="user-item" data-user-id="${user.id}">
@@ -415,13 +416,34 @@ function renderUserList() {
         <div class="user-item-name">${escapeHtml(user.display_name || user.username)}</div>
         <div class="user-item-status ${isUserOnline(user) ? 'online' : 'offline'}"></div>
       </div>
-    `).join('');
+    `);
 
-  // Bind click events (create private chat)
+  // Add Game Lobby as a virtual user (always online, always at the top)
+  const gameLobbyItem = `
+    <div class="user-item game-lobby-user" data-special="game-lobby">
+      <div class="user-item-avatar">🎮</div>
+      <div class="user-item-name">游戏大厅 / Game Lobby</div>
+      <div class="user-item-status online"></div>
+    </div>
+  `;
+
+  userList.innerHTML = gameLobbyItem + userItems.join('');
+
+  // Bind click events
   document.querySelectorAll('.user-item').forEach(item => {
     item.addEventListener('click', () => {
-      const userId = parseInt(item.dataset.userId);
-      createPrivateChat(userId);
+      // Check if it's the game lobby virtual user
+      if (item.dataset.special === 'game-lobby') {
+        showGameLobby();
+        // Mobile: Auto-hide sidebar after selecting
+        if (window.innerWidth <= 768) {
+          sidebar.classList.remove('show');
+        }
+      } else {
+        // Regular user: create private chat
+        const userId = parseInt(item.dataset.userId);
+        createPrivateChat(userId);
+      }
     });
   });
 }
@@ -429,10 +451,31 @@ function renderUserList() {
 // Select room
 function selectRoom(room) {
   currentRoom = room;
+
+  // Handle game lobby room differently
+  if (room.id === 'game-lobby') {
+    showGameLobby();
+    // Re-render room list to apply active style
+    renderRoomList();
+    // Mobile: Auto-hide sidebar after selecting room
+    if (window.innerWidth <= 768) {
+      sidebar.classList.remove('show');
+    }
+    return;
+  }
+
+  // Hide game lobby container if it exists
+  const gameLobbyContainer = document.getElementById('gameLobbyContainer');
+  if (gameLobbyContainer) {
+    gameLobbyContainer.style.display = 'none';
+  }
+
+  // Show normal chat UI
+  messageList.style.display = 'flex';
+  inputArea.style.display = 'flex';
+
   currentRoomName.textContent = room.name;
   roomSubtitle.textContent = room.type === 'private' ? i18n.t('room.privateChat') : i18n.t('chat.rooms');
-
-  inputArea.style.display = 'flex';
 
   // Re-render room list to apply active style
   renderRoomList();
@@ -993,3 +1036,180 @@ document.addEventListener('keydown', (e) => {
     hideChangePasswordModal();
   }
 });
+
+// ============================================================
+// Game Lobby Integration
+// ============================================================
+
+// Cache for game progress
+window.__cachedGameProgress = {};
+
+// Show game lobby
+function showGameLobby() {
+  // Hide normal chat UI elements
+  inputArea.style.display = 'none';
+  messageList.style.display = 'none';
+
+  // Update header
+  currentRoomName.textContent = '🎮 游戏大厅';
+  roomSubtitle.textContent = '';
+
+  // Create or get game lobby container (as sibling to messageList, not child)
+  let gameLobbyContainer = document.getElementById('gameLobbyContainer');
+  if (!gameLobbyContainer) {
+    gameLobbyContainer = document.createElement('div');
+    gameLobbyContainer.id = 'gameLobbyContainer';
+    gameLobbyContainer.className = 'game-lobby-container';
+    messageList.parentElement.appendChild(gameLobbyContainer);
+  }
+
+  gameLobbyContainer.style.display = 'flex';
+
+  // Inject game lobby grid
+  gameLobbyContainer.innerHTML = `
+    <div class="game-lobby-header">
+      <h2>🎮 游戏大厅 / Game Lobby</h2>
+      <p>选择一个游戏开始挑战 / Choose a game to start</p>
+    </div>
+
+    <div class="game-grid">
+      <div class="game-card" data-game="sliding-puzzle">
+        <div class="game-icon">🧩</div>
+        <h3>数字华容道</h3>
+        <p>9 关卡 · 滑块解谜</p>
+      </div>
+
+      <div class="game-card" data-game="memory-game">
+        <div class="game-icon">🃏</div>
+        <h3>记忆翻牌</h3>
+        <p>9 关卡 · 配对记忆</p>
+      </div>
+
+      <div class="game-card" data-game="math-challenge">
+        <div class="game-icon">🔢</div>
+        <h3>速算挑战</h3>
+        <p>9 关卡 · 限时计算</p>
+      </div>
+
+      <div class="game-card" data-game="poetry-game">
+        <div class="game-icon">📖</div>
+        <h3>古诗背诵</h3>
+        <p>13 首 · 小学必背</p>
+      </div>
+    </div>
+
+    <div id="gamePlayerFrame" style="display:none;">
+      <button class="btn-back-to-lobby">← 返回游戏大厅</button>
+      <iframe id="gameIframe" src="" frameborder="0"></iframe>
+    </div>
+  `;
+
+  // Attach click handlers
+  document.querySelectorAll('.game-card').forEach(card => {
+    card.addEventListener('click', () => {
+      launchGame(card.dataset.game);
+    });
+  });
+
+  // Back button handler
+  const backBtn = document.querySelector('.btn-back-to-lobby');
+  if (backBtn) {
+    backBtn.addEventListener('click', () => {
+      const gameLobbyHeader = document.querySelector('.game-lobby-header');
+      const gameGrid = document.querySelector('.game-grid');
+      const gamePlayerFrame = document.getElementById('gamePlayerFrame');
+
+      if (gamePlayerFrame) gamePlayerFrame.style.display = 'none';
+      if (gameLobbyHeader) gameLobbyHeader.style.display = 'block';
+      if (gameGrid) gameGrid.style.display = 'grid';
+    });
+  }
+}
+
+// Launch game in iframe
+function launchGame(gameName) {
+  // Hide game grid and header, show iframe
+  const gameLobbyHeader = document.querySelector('.game-lobby-header');
+  const gameGrid = document.querySelector('.game-grid');
+  const gamePlayerFrame = document.getElementById('gamePlayerFrame');
+
+  if (gameLobbyHeader) gameLobbyHeader.style.display = 'none';
+  if (gameGrid) gameGrid.style.display = 'none';
+  if (gamePlayerFrame) gamePlayerFrame.style.display = 'flex';
+
+  // Load game in iframe
+  const iframe = document.getElementById('gameIframe');
+  const gameFileMap = {
+    'sliding_puzzle': 'sliding-puzzle.html',
+    'memory_game': 'memory-game.html',
+    'math_challenge': 'math-challenge.html',
+    'poetry_game': 'poetry-game.html'
+  };
+
+  iframe.src = `/games/${gameFileMap[gameName] || gameName + '.html'}`;
+
+  console.log(`🎮 Launching game: ${gameName}`);
+}
+
+// PostMessage bridge: Listen for messages from game iframes
+window.addEventListener('message', (event) => {
+  // Security: validate origin (optional, can skip for localhost)
+  // if (event.origin !== window.location.origin) return;
+
+  const { type, game, level, stars, moves, timeSeconds } = event.data;
+
+  if (type === 'requestGameProgress') {
+    // Game is requesting its progress data
+    socket.emit('getGameProgress', { gameName: game });
+  }
+  else if (type === 'saveGameProgress') {
+    // Game completed a level, save to server
+    socket.emit('saveGameProgress', {
+      gameName: game,
+      level,
+      stars,
+      moves,
+      timeSeconds
+    });
+  }
+  else if (type === 'gameReady') {
+    // Game loaded and ready, send cached progress if available
+    if (window.__cachedGameProgress && window.__cachedGameProgress[game]) {
+      const iframe = document.getElementById('gameIframe');
+      if (iframe && iframe.contentWindow) {
+        iframe.contentWindow.postMessage({
+          type: 'loadProgress',
+          progress: window.__cachedGameProgress[game]
+        }, '*');
+      }
+    }
+  }
+});
+
+// Listen for game progress from server
+socket.on('gameProgress', (data) => {
+  const { gameName, stars, unlocked } = data;
+
+  // Cache for iframe to consume
+  if (!window.__cachedGameProgress) {
+    window.__cachedGameProgress = {};
+  }
+  window.__cachedGameProgress[gameName] = { stars, unlocked };
+
+  // If iframe is active, send immediately
+  const iframe = document.getElementById('gameIframe');
+  if (iframe && iframe.src.includes(gameName)) {
+    iframe.contentWindow.postMessage({
+      type: 'loadProgress',
+      progress: { stars, unlocked }
+    }, '*');
+  }
+
+  console.log('✅ Game progress loaded:', data);
+});
+
+socket.on('gameProgressSaved', (data) => {
+  console.log('✅ Game progress saved:', data);
+  // Could show a toast notification here
+});
+

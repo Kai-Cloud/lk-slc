@@ -4,7 +4,7 @@ const { Server } = require('socket.io');
 const path = require('path');
 require('dotenv').config();
 
-const { initDatabase, userDb, roomDb, messageDb, unreadDb, getOrCreatePrivateRoom } = require('./db');
+const { initDatabase, userDb, roomDb, messageDb, unreadDb, gameDb, getOrCreatePrivateRoom } = require('./db');
 const { authenticateUser, verifyToken, changePassword } = require('./auth');
 
 // Initialize database
@@ -23,6 +23,11 @@ const io = new Server(httpServer, {
 // Middleware
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
+
+// Serve lk-sgl game files as external plugin
+// Maps /games/* -> ../lk-sgl/*
+app.use('/games', express.static(path.join(__dirname, '..', '..', 'lk-sgl')));
+console.log('📦 Game plugin directory:', path.join(__dirname, '..', '..', 'lk-sgl'));
 
 // Online users mapping { userId: socketId }
 const onlineUsers = new Map();
@@ -534,6 +539,74 @@ io.on('connection', (socket) => {
     socket.emit('roomList', roomsWithLastMessage);
 
     console.log(`📌 User ${currentUser.username} ${pinned ? 'pinned' : 'unpinned'} room: ${roomId}`);
+  });
+
+  // Game progress: Load game progress for current user
+  socket.on('getGameProgress', (data) => {
+    if (!currentUser) {
+      socket.emit('error', { message: 'Please login first' });
+      return;
+    }
+
+    const { gameName } = data;
+    const progressRecords = gameDb.getProgress.all(currentUser.id, gameName);
+
+    const starsMap = {};
+    progressRecords.forEach(p => {
+      starsMap[p.level] = p.stars;
+    });
+
+    const unlockData = gameDb.getUnlocked.get(currentUser.id, gameName);
+    const highestUnlocked = unlockData?.highest_unlocked || 1;
+
+    socket.emit('gameProgress', {
+      gameName,
+      stars: starsMap,
+      unlocked: highestUnlocked
+    });
+
+    console.log(`📊 User ${currentUser.username} loaded progress for ${gameName}`);
+  });
+
+  // Game progress: Save level completion
+  socket.on('saveGameProgress', (data) => {
+    if (!currentUser) return;
+
+    const { gameName, level, stars, moves, timeSeconds } = data;
+    if (!gameName || !level || stars === undefined) return;
+
+    gameDb.saveProgress.run(
+      currentUser.id,
+      gameName,
+      level,
+      stars,
+      moves || null,
+      timeSeconds || null
+    );
+
+    const currentUnlock = gameDb.getUnlocked.get(currentUser.id, gameName);
+    const currentMax = currentUnlock?.highest_unlocked || 1;
+    if (level >= currentMax && stars > 0) {
+      gameDb.updateUnlocked.run(currentUser.id, gameName, level + 1);
+    }
+
+    socket.emit('gameProgressSaved', {
+      gameName,
+      level,
+      stars,
+      unlocked: Math.max(currentMax, level + 1)
+    });
+
+    console.log(`🎮 ${currentUser.username} completed ${gameName} L${level} ⭐${stars}`);
+  });
+
+  // Game leaderboard: Get leaderboard for a specific game and level
+  socket.on('getGameLeaderboard', (data) => {
+    const { gameName, level } = data;
+    if (!gameName || !level) return;
+
+    const leaderboard = gameDb.getLeaderboard.all(gameName, level);
+    socket.emit('gameLeaderboard', { gameName, level, leaderboard });
   });
 
   // Disconnect

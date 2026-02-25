@@ -94,6 +94,34 @@ function initDatabase() {
     )
   `);
 
+  // Game progress table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS game_progress (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      game_name TEXT NOT NULL,
+      level INTEGER NOT NULL,
+      stars INTEGER NOT NULL CHECK(stars >= 0 AND stars <= 3),
+      moves INTEGER,
+      time_seconds INTEGER,
+      completed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, game_name, level),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
+  // Game unlocks table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS game_unlocks (
+      user_id INTEGER NOT NULL,
+      game_name TEXT NOT NULL,
+      highest_unlocked INTEGER NOT NULL DEFAULT 1,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id, game_name),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
   // Create indexes
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_messages_room ON messages(room_id, created_at DESC);
@@ -102,6 +130,8 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
     CREATE INDEX IF NOT EXISTS idx_unread_counts_user ON unread_counts(user_id);
     CREATE INDEX IF NOT EXISTS idx_unread_counts_room ON unread_counts(room_id);
+    CREATE INDEX IF NOT EXISTS idx_game_progress_user ON game_progress(user_id);
+    CREATE INDEX IF NOT EXISTS idx_game_progress_game_level ON game_progress(game_name, level);
   `);
 
   // Create default "Lobby" room
@@ -345,6 +375,61 @@ const unreadDb = {
   `)
 };
 
+// Game operations
+const gameDb = {
+  // Get all progress records for a user's game
+  getProgress: db.prepare(`
+    SELECT level, stars, moves, time_seconds, completed_at
+    FROM game_progress
+    WHERE user_id = ? AND game_name = ?
+    ORDER BY level ASC
+  `),
+
+  // Save/update level completion (upserts, keeps best star count)
+  saveProgress: db.prepare(`
+    INSERT INTO game_progress (user_id, game_name, level, stars, moves, time_seconds)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(user_id, game_name, level)
+    DO UPDATE SET
+      stars = CASE WHEN excluded.stars > stars THEN excluded.stars ELSE stars END,
+      moves = excluded.moves,
+      time_seconds = excluded.time_seconds,
+      completed_at = CURRENT_TIMESTAMP
+  `),
+
+  // Get highest unlocked level for a game
+  getUnlocked: db.prepare(`
+    SELECT highest_unlocked FROM game_unlocks
+    WHERE user_id = ? AND game_name = ?
+  `),
+
+  // Update highest unlocked level (only increases, never decreases)
+  updateUnlocked: db.prepare(`
+    INSERT INTO game_unlocks (user_id, game_name, highest_unlocked)
+    VALUES (?, ?, ?)
+    ON CONFLICT(user_id, game_name)
+    DO UPDATE SET
+      highest_unlocked = CASE
+        WHEN excluded.highest_unlocked > highest_unlocked
+        THEN excluded.highest_unlocked
+        ELSE highest_unlocked
+      END,
+      updated_at = CURRENT_TIMESTAMP
+  `),
+
+  // Get leaderboard for specific game+level (top 10 by stars, then moves/time)
+  getLeaderboard: db.prepare(`
+    SELECT u.username, u.display_name, gp.stars, gp.moves, gp.time_seconds, gp.completed_at
+    FROM game_progress gp
+    JOIN users u ON gp.user_id = u.id
+    WHERE gp.game_name = ? AND gp.level = ?
+    ORDER BY gp.stars DESC,
+             COALESCE(gp.moves, 999999) ASC,
+             COALESCE(gp.time_seconds, 999999) ASC
+    LIMIT 10
+  `)
+};
+
 // 工具函数：获取私聊房间 ID
 function getPrivateRoomId(userId1, userId2) {
   // 确保 room ID 一致（小的 ID 在前）
@@ -392,6 +477,7 @@ module.exports = {
   messageDb,
   sessionDb,
   unreadDb,
+  gameDb,
   getPrivateRoomId,
   getOrCreatePrivateRoom
 };
