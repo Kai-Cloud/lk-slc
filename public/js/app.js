@@ -1173,7 +1173,11 @@ window.addEventListener('message', (event) => {
     });
   }
   else if (type === 'gameReady') {
-    // Game loaded and ready, send cached progress if available
+    // Game loaded and ready, always request fresh progress from server
+    console.log(`🎮 Game ready: ${game}, requesting progress...`);
+    socket.emit('getGameProgress', { gameName: game });
+
+    // Also send cached data immediately if available (for instant display)
     if (window.__cachedGameProgress && window.__cachedGameProgress[game]) {
       const iframe = document.getElementById('gameIframe');
       if (iframe && iframe.contentWindow) {
@@ -1198,11 +1202,16 @@ socket.on('gameProgress', (data) => {
 
   // If iframe is active, send immediately
   const iframe = document.getElementById('gameIframe');
-  if (iframe && iframe.src.includes(gameName)) {
-    iframe.contentWindow.postMessage({
-      type: 'loadProgress',
-      progress: { stars, unlocked }
-    }, '*');
+  if (iframe && iframe.src) {
+    // Convert game name format: sliding_puzzle -> sliding-puzzle
+    const gameFileName = gameName.replace(/_/g, '-');
+    if (iframe.src.includes(gameFileName)) {
+      iframe.contentWindow.postMessage({
+        type: 'loadProgress',
+        progress: { stars, unlocked }
+      }, '*');
+      console.log(`📤 Sent progress to ${gameName} iframe:`, { stars, unlocked });
+    }
   }
 
   console.log('✅ Game progress loaded:', data);
