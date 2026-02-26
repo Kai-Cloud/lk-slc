@@ -197,6 +197,20 @@ function initDatabase() {
     console.error('⚠️  Database migration warning:', error.message);
   }
 
+  // Database migration: Add is_banned column to users table (if not exists)
+  try {
+    const usersTableInfo = db.prepare("PRAGMA table_info(users)").all();
+    const hasBannedColumn = usersTableInfo.some(col => col.name === 'is_banned');
+
+    if (!hasBannedColumn) {
+      console.log('🔄 Database migration: Adding is_banned column to users table...');
+      db.exec('ALTER TABLE users ADD COLUMN is_banned INTEGER DEFAULT 0');
+      console.log('✅ Migration complete');
+    }
+  } catch (error) {
+    console.error('⚠️  Database migration warning:', error.message);
+  }
+
   console.log('✅ Database initialized:', dbPath);
 }
 
@@ -224,7 +238,7 @@ const userDb = {
   updatePassword: db.prepare('UPDATE users SET password_hash = ? WHERE id = ?'),
 
   // Get all users
-  getAll: db.prepare('SELECT id, username, display_name, is_bot, is_admin, last_seen FROM users'),
+  getAll: db.prepare('SELECT id, username, display_name, is_bot, is_admin, is_banned, last_seen FROM users'),
 
   // Get online users (active within last 5 minutes)
   getOnline: db.prepare(`
@@ -235,6 +249,9 @@ const userDb = {
 
   // Set user as admin
   setAdmin: db.prepare('UPDATE users SET is_admin = ? WHERE id = ?'),
+
+  // Ban/unban user
+  setBanned: db.prepare('UPDATE users SET is_banned = ? WHERE id = ?'),
 
   // Delete user
   deleteUser: db.prepare('DELETE FROM users WHERE id = ?')

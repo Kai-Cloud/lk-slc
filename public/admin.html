@@ -363,6 +363,7 @@
             <td>
               ${user.is_admin ? '<span class="badge badge-admin">管理员</span> ' : ''}
               ${user.is_bot ? '<span class="badge badge-bot">Bot</span>' : ''}
+              ${user.is_banned ? '<span class="badge" style="background: #f44336; color: white;">已封禁</span>' : ''}
             </td>
             <td>
               <span class="badge ${isOnline ? 'badge-online' : 'badge-offline'}">
@@ -382,7 +383,14 @@
                     </button>` : ''
                 }
                 ${user.id !== currentUser.id ?
-                  `<button class="btn btn-danger btn-small" onclick="deleteUser(${user.id}, '${user.username}')">
+                  `<button class="btn ${user.is_banned ? 'btn-primary' : 'btn-secondary'} btn-small"
+                          onclick="${user.is_banned ? 'unbanUser' : 'banUser'}(${user.id}, '${user.username}')">
+                    ${user.is_banned ? '解封' : '封禁'}
+                  </button>
+                  <button class="btn btn-secondary btn-small" onclick="resetPassword(${user.id}, '${user.username}')">
+                    重置密码
+                  </button>
+                  <button class="btn btn-danger btn-small" onclick="deleteUser(${user.id}, '${user.username}')">
                     删除
                   </button>` : ''
                 }
@@ -503,6 +511,31 @@
     function deleteUser(userId, username) {
       if (confirm(`确定要删除用户 ${username} 吗？此操作不可恢复！`)) {
         socket.emit('adminDeleteUser', { userId });
+      }
+    }
+
+    function banUser(userId, username) {
+      if (confirm(`确定要封禁用户 ${username} 吗？该用户将无法登录。`)) {
+        socket.emit('adminSetUserBanned', { userId, isBanned: true });
+      }
+    }
+
+    function unbanUser(userId, username) {
+      if (confirm(`确定要解封用户 ${username} 吗？`)) {
+        socket.emit('adminSetUserBanned', { userId, isBanned: false });
+      }
+    }
+
+    function resetPassword(userId, username) {
+      const newPassword = prompt(`请输入 ${username} 的新密码（至少6位）：`);
+      if (newPassword) {
+        if (newPassword.length < 6) {
+          showError('密码至少需要6位字符');
+          return;
+        }
+        if (confirm(`确定要将 ${username} 的密码重置为 "${newPassword}" 吗？用户将被强制下线。`)) {
+          socket.emit('adminResetUserPassword', { userId, newPassword });
+        }
       }
     }
 

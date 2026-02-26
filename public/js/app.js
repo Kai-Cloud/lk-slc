@@ -318,6 +318,12 @@ function connectSocket() {
     alert(i18n.t('error.connectionError') + ': ' + data.message);
   });
 
+  // Handle forced logout (ban/password reset)
+  socket.on('forcedLogout', (data) => {
+    alert(data.reason);
+    logout();
+  });
+
   // Receive unread count updates
   socket.on('unreadCountUpdate', (data) => {
     const { roomId, count } = data;

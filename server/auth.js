@@ -18,7 +18,12 @@ async function authenticateUser(username, password, isBot = false) {
     let user = userDb.findByUsername.get(username);
 
     if (user) {
-      // User exists, verify password
+      // User exists, check if banned
+      if (user.is_banned === 1) {
+        return { success: false, error: 'Your account has been banned. Please contact administrator.' };
+      }
+
+      // Verify password
       const isValid = await bcrypt.compare(password, user.password_hash);
       if (!isValid) {
         return { success: false, error: 'Invalid password' };

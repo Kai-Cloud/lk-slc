@@ -650,6 +650,104 @@ io.on('connection', (socket) => {
     console.log(`👑 Admin ${currentUser.username} ${isAdmin ? 'promoted' : 'demoted'} user ${user.username} (ID: ${userId})`);
   });
 
+  // Admin: Ban/Unban user
+  socket.on('adminSetUserBanned', (data) => {
+    if (!currentUser || !currentUser.isAdmin) {
+      socket.emit('error', { message: 'Admin access required' });
+      return;
+    }
+
+    const { userId, isBanned } = data;
+    const user = userDb.findById.get(userId);
+
+    if (!user) {
+      socket.emit('error', { message: 'User not found' });
+      return;
+    }
+
+    if (user.id === currentUser.id) {
+      socket.emit('error', { message: 'Cannot ban yourself' });
+      return;
+    }
+
+    userDb.setBanned.run(isBanned ? 1 : 0, userId);
+
+    // If banning, kick the user offline
+    if (isBanned) {
+      const targetSocketId = onlineUsers.get(userId);
+      if (targetSocketId) {
+        const targetSocket = io.sockets.sockets.get(targetSocketId);
+        if (targetSocket) {
+          targetSocket.emit('forcedLogout', {
+            reason: 'Your account has been banned by administrator'
+          });
+          targetSocket.disconnect(true);
+        }
+        onlineUsers.delete(userId);
+      }
+    }
+
+    socket.emit('adminActionSuccess', {
+      message: `用户 ${user.username} 已${isBanned ? '封禁' : '解封'}`
+    });
+
+    console.log(`🚫 Admin ${currentUser.username} ${isBanned ? 'banned' : 'unbanned'} user ${user.username} (ID: ${userId})`);
+  });
+
+  // Admin: Reset user password
+  socket.on('adminResetUserPassword', (data) => {
+    if (!currentUser || !currentUser.isAdmin) {
+      socket.emit('error', { message: 'Admin access required' });
+      return;
+    }
+
+    const { userId, newPassword } = data;
+
+    if (!newPassword || newPassword.length < 6) {
+      socket.emit('error', { message: 'Password must be at least 6 characters' });
+      return;
+    }
+
+    const user = userDb.findById.get(userId);
+    if (!user) {
+      socket.emit('error', { message: 'User not found' });
+      return;
+    }
+
+    // Hash new password and update
+    const bcrypt = require('bcryptjs');
+    bcrypt.hash(newPassword, 10, (err, hash) => {
+      if (err) {
+        socket.emit('error', { message: 'Failed to reset password' });
+        return;
+      }
+
+      userDb.updatePassword.run(hash, userId);
+
+      // Delete all sessions for this user (force re-login)
+      db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
+
+      // If user is online, kick them out
+      const targetSocketId = onlineUsers.get(userId);
+      if (targetSocketId) {
+        const targetSocket = io.sockets.sockets.get(targetSocketId);
+        if (targetSocket) {
+          targetSocket.emit('forcedLogout', {
+            reason: 'Your password has been reset by administrator. Please login again.'
+          });
+          targetSocket.disconnect(true);
+        }
+        onlineUsers.delete(userId);
+      }
+
+      socket.emit('adminActionSuccess', {
+        message: `用户 ${user.username} 密码已重置为: ${newPassword}`
+      });
+
+      console.log(`🔑 Admin ${currentUser.username} reset password for user ${user.username} (ID: ${userId})`);
+    });
+  });
+
   // Admin: Delete user
   socket.on('adminDeleteUser', (data) => {
     if (!currentUser || !currentUser.isAdmin) {
