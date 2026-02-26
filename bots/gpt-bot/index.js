@@ -1,11 +1,13 @@
 const io = require('socket.io-client');
 const axios = require('axios');
 const https = require('https');
+const path = require('path');
 require('dotenv').config();
 
 // Configuration
 const SERVER_URL = process.env.SERVER_URL || 'http://localhost:3030';
-const BOT_USERNAME = process.env.BOT_USERNAME || 'gpt-bot';
+// Use folder name as bot username (e.g., "gpt-bot" from "bots/gpt-bot")
+const BOT_USERNAME = path.basename(__dirname);
 const BOT_PASSWORD = process.env.BOT_PASSWORD;
 const FOUNDRY_ENDPOINT = process.env.FOUNDRY_ENDPOINT;
 const FOUNDRY_API_KEY = process.env.FOUNDRY_API_KEY;
