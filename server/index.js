@@ -4,7 +4,7 @@ const { Server } = require('socket.io');
 const path = require('path');
 require('dotenv').config();
 
-const { initDatabase, userDb, roomDb, messageDb, unreadDb, gameDb, getOrCreatePrivateRoom } = require('./db');
+const { db, initDatabase, userDb, roomDb, messageDb, unreadDb, gameDb, getOrCreatePrivateRoom } = require('./db');
 const { authenticateUser, verifyToken, changePassword } = require('./auth');
 
 // Initialize database
@@ -670,14 +670,42 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Delete user (cascades will handle related records)
-    userDb.deleteUser.run(userId);
+    try {
+      // Manually delete related records before deleting user
+      // 1. Delete sessions
+      db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
 
-    socket.emit('adminActionSuccess', {
-      message: `用户 ${user.username} 已删除`
-    });
+      // 2. Delete room memberships
+      db.prepare('DELETE FROM room_members WHERE user_id = ?').run(userId);
 
-    console.log(`🗑️  Admin ${currentUser.username} deleted user ${user.username} (ID: ${userId})`);
+      // 3. Delete messages (set created_by to NULL for rooms created by this user)
+      db.prepare('UPDATE rooms SET created_by = NULL WHERE created_by = ?').run(userId);
+
+      // 4. Delete messages
+      db.prepare('DELETE FROM messages WHERE user_id = ?').run(userId);
+
+      // 5. Delete unread counts (already has CASCADE)
+      db.prepare('DELETE FROM unread_counts WHERE user_id = ?').run(userId);
+
+      // 6. Delete game progress (already has CASCADE)
+      db.prepare('DELETE FROM game_progress WHERE user_id = ?').run(userId);
+
+      // 7. Delete game unlocks (already has CASCADE)
+      db.prepare('DELETE FROM game_unlocks WHERE user_id = ?').run(userId);
+
+      // 8. Finally delete the user
+      userDb.deleteUser.run(userId);
+
+      socket.emit('adminActionSuccess', {
+        message: `用户 ${user.username} 已删除`
+      });
+
+      console.log(`🗑️  Admin ${currentUser.username} deleted user ${user.username} (ID: ${userId})`);
+
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      socket.emit('error', { message: '删除用户失败: ' + error.message });
+    }
   });
 
   // Admin: Get special rooms (game-lobby, etc.)
