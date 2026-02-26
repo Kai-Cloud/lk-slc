@@ -14,13 +14,21 @@ async function authenticateUser(username, password, isBot = false) {
       return { success: false, error: 'Username and password required' };
     }
 
-    // Validate username format (alphanumeric, Chinese, underscore, hyphen, max 10 chars)
-    const usernameRegex = /^[\w\-\u4E00-\u9FFF]{1,10}$/;
+    // Validate username format (alphanumeric, Chinese, underscore, hyphen, max 20 chars)
+    const usernameRegex = /^[\w\-\u4E00-\u9FFF]{1,20}$/;
     if (!usernameRegex.test(username)) {
       return {
         success: false,
-        error: 'Username must be 1-10 characters and contain only letters, numbers, Chinese characters, underscore, or hyphen. / 用户名必须为1-10个字符，只能包含字母、数字、中文、下划线或横杠。'
+        error: 'Username must be 1-20 characters and contain only letters, numbers, Chinese characters, underscore, or hyphen. / 用户名必须为1-20个字符，只能包含字母、数字、中文、下划线或横杠。'
       };
+    }
+
+    // Validate password length
+    if (password.length < 3) {
+      return { success: false, error: 'Password must be at least 3 characters. / 密码至少需要3个字符。' };
+    }
+    if (password.length > 50) {
+      return { success: false, error: 'Password cannot exceed 50 characters. / 密码不能超过50个字符。' };
     }
 
     // Find user
@@ -201,8 +209,11 @@ async function changePassword(userId, currentPassword, newPassword) {
     }
 
     // Validate new password length
-    if (newPassword.length < 6) {
-      return { success: false, error: 'New password must be at least 6 characters' };
+    if (newPassword.length < 3) {
+      return { success: false, error: 'New password must be at least 3 characters' };
+    }
+    if (newPassword.length > 50) {
+      return { success: false, error: 'New password cannot exceed 50 characters' };
     }
 
     // Find user
