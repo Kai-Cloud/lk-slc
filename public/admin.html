@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>管理控制台 - Simple LAN Chat</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 20px;
+      padding: 40px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 30px;
+      padding-bottom: 20px;
+      border-bottom: 2px solid #e0e0e0;
+    }
+
+    .header h1 {
+      color: #333;
+      font-size: 28px;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.3s;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-secondary {
+      background: #f5f5f5;
+      color: #333;
+    }
+
+    .btn-secondary:hover {
+      background: #e0e0e0;
+    }
+
+    .btn-danger {
+      background: #f44336;
+      color: white;
+    }
+
+    .btn-danger:hover {
+      background: #d32f2f;
+    }
+
+    .section {
+      margin-bottom: 40px;
+    }
+
+    .section h2 {
+      color: #555;
+      font-size: 20px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    thead {
+      background: #f5f5f5;
+    }
+
+    th, td {
+      padding: 12px 16px;
+      text-align: left;
+      border-bottom: 1px solid #e0e0e0;
+    }
+
+    th {
+      font-weight: 600;
+      color: #555;
+      font-size: 14px;
+    }
+
+    td {
+      color: #333;
+      font-size: 14px;
+    }
+
+    tbody tr:hover {
+      background: #fafafa;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .badge-admin {
+      background: #ffd700;
+      color: #333;
+    }
+
+    .badge-bot {
+      background: #9c27b0;
+      color: white;
+    }
+
+    .badge-online {
+      background: #4caf50;
+      color: white;
+    }
+
+    .badge-offline {
+      background: #999;
+      color: white;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn-small {
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+
+    .error {
+      background: #fee;
+      color: #c33;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      display: none;
+    }
+
+    .error.show {
+      display: block;
+    }
+
+    .success {
+      background: #e8f5e9;
+      color: #2e7d32;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      display: none;
+    }
+
+    .success.show {
+      display: block;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: #999;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: #999;
+    }
+
+    @media (max-width: 768px) {
+      .container {
+        padding: 20px;
+      }
+
+      table {
+        font-size: 12px;
+      }
+
+      th, td {
+        padding: 8px;
+      }
+
+      .actions {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>👑 管理控制台</h1>
+      <button class="btn btn-secondary" onclick="goBack()">← 返回聊天</button>
+    </div>
+
+    <div class="error" id="error"></div>
+    <div class="success" id="success"></div>
+
+    <!-- User Management Section -->
+    <div class="section">
+      <h2>👥 用户管理</h2>
+      <div id="usersList">
+        <div class="loading">加载中...</div>
+      </div>
+    </div>
+
+    <!-- Special Rooms Management Section -->
+    <div class="section">
+      <h2>🎮 特殊房间管理 (游戏大厅)</h2>
+      <p style="color: #666; font-size: 14px; margin-bottom: 20px;">
+        管理哪些用户可以看到"游戏大厅"等特殊房间
+      </p>
+      <div id="specialRoomsList">
+        <div class="loading">加载中...</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const errorDiv = document.getElementById('error');
+    const successDiv = document.getElementById('success');
+    let socket = null;
+    let currentUser = null;
+
+    // Check authentication
+    const token = localStorage.getItem('chatToken');
+    const userStr = localStorage.getItem('chatUser');
+
+    if (!token || !userStr) {
+      window.location.href = '/index.html';
+    }
+
+    try {
+      currentUser = JSON.parse(userStr);
+      if (!currentUser.isAdmin) {
+        showError('你没有管理员权限');
+        setTimeout(() => {
+          window.location.href = '/chat.html';
+        }, 2000);
+      }
+    } catch (e) {
+      window.location.href = '/index.html';
+    }
+
+    // Initialize Socket.io
+    socket = io({
+      auth: { token }
+    });
+
+    socket.on('connect', () => {
+      console.log('Connected to server');
+      loadUsers();
+      loadSpecialRooms();
+    });
+
+    socket.on('error', (data) => {
+      showError(data.message);
+    });
+
+    // Load all users
+    function loadUsers() {
+      socket.emit('adminGetAllUsers');
+    }
+
+    socket.on('adminUsersList', (data) => {
+      const { users } = data;
+      const container = document.getElementById('usersList');
+
+      if (users.length === 0) {
+        container.innerHTML = '<div class="empty-state">暂无用户</div>';
+        return;
+      }
+
+      let html = `
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>用户名</th>
+              <th>显示名称</th>
+              <th>类型</th>
+              <th>状态</th>
+              <th>最后活跃</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      users.forEach(user => {
+        const isOnline = new Date() - new Date(user.last_seen) < 5 * 60 * 1000;
+        const lastSeen = new Date(user.last_seen).toLocaleString('zh-CN');
+
+        html += `
+          <tr>
+            <td>${user.id}</td>
+            <td>${user.username}</td>
+            <td>${user.display_name || user.username}</td>
+            <td>
+              ${user.is_admin ? '<span class="badge badge-admin">管理员</span> ' : ''}
+              ${user.is_bot ? '<span class="badge badge-bot">Bot</span>' : ''}
+            </td>
+            <td>
+              <span class="badge ${isOnline ? 'badge-online' : 'badge-offline'}">
+                ${isOnline ? '在线' : '离线'}
+              </span>
+            </td>
+            <td>${lastSeen}</td>
+            <td>
+              <div class="actions">
+                ${!user.is_admin ?
+                  `<button class="btn btn-primary btn-small" onclick="promoteToAdmin(${user.id}, '${user.username}')">
+                    设为管理员
+                  </button>` :
+                  user.id !== currentUser.id ?
+                    `<button class="btn btn-secondary btn-small" onclick="demoteFromAdmin(${user.id}, '${user.username}')">
+                      取消管理员
+                    </button>` : ''
+                }
+                ${user.id !== currentUser.id ?
+                  `<button class="btn btn-danger btn-small" onclick="deleteUser(${user.id}, '${user.username}')">
+                    删除
+                  </button>` : ''
+                }
+              </div>
+            </td>
+          </tr>
+        `;
+      });
+
+      html += '</tbody></table>';
+      container.innerHTML = html;
+    });
+
+    // Load special rooms visibility
+    function loadSpecialRooms() {
+      socket.emit('adminGetSpecialRooms');
+    }
+
+    socket.on('adminSpecialRoomsList', (data) => {
+      const { rooms, allUsers } = data;
+      const container = document.getElementById('specialRoomsList');
+
+      if (rooms.length === 0) {
+        container.innerHTML = '<div class="empty-state">暂无特殊房间</div>';
+        return;
+      }
+
+      let html = '';
+      rooms.forEach(room => {
+        const members = room.members || [];
+        const memberIds = new Set(members.map(m => m.id));
+
+        html += `
+          <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+            <h3 style="margin-bottom: 15px;">${room.name} (${room.id})</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>用户</th>
+                  <th>可见性</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+        `;
+
+        allUsers.forEach(user => {
+          const hasAccess = memberIds.has(user.id);
+          html += `
+            <tr>
+              <td>
+                ${user.username}
+                ${user.is_admin ? '<span class="badge badge-admin">管理员</span>' : ''}
+                ${user.is_bot ? '<span class="badge badge-bot">Bot</span>' : ''}
+              </td>
+              <td>
+                <span class="badge ${hasAccess ? 'badge-online' : 'badge-offline'}">
+                  ${hasAccess ? '可见' : '不可见'}
+                </span>
+              </td>
+              <td>
+                ${hasAccess ?
+                  `<button class="btn btn-danger btn-small" onclick="removeFromRoom('${room.id}', ${user.id}, '${user.username}')">
+                    移除
+                  </button>` :
+                  `<button class="btn btn-primary btn-small" onclick="addToRoom('${room.id}', ${user.id}, '${user.username}')">
+                    添加
+                  </button>`
+                }
+              </td>
+            </tr>
+          `;
+        });
+
+        html += `
+              </tbody>
+            </table>
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+    });
+
+    // Admin actions
+    function promoteToAdmin(userId, username) {
+      if (confirm(`确定要将 ${username} 设置为管理员吗？`)) {
+        socket.emit('adminSetUserAdmin', { userId, isAdmin: true });
+      }
+    }
+
+    function demoteFromAdmin(userId, username) {
+      if (confirm(`确定要取消 ${username} 的管理员权限吗？`)) {
+        socket.emit('adminSetUserAdmin', { userId, isAdmin: false });
+      }
+    }
+
+    function deleteUser(userId, username) {
+      if (confirm(`确定要删除用户 ${username} 吗？此操作不可恢复！`)) {
+        socket.emit('adminDeleteUser', { userId });
+      }
+    }
+
+    function addToRoom(roomId, userId, username) {
+      socket.emit('adminAddUserToRoom', { roomId, userId });
+      showSuccess(`已将 ${username} 添加到房间`);
+    }
+
+    function removeFromRoom(roomId, userId, username) {
+      if (confirm(`确定要将 ${username} 从此房间移除吗？`)) {
+        socket.emit('adminRemoveUserFromRoom', { roomId, userId });
+        showSuccess(`已将 ${username} 从房间移除`);
+      }
+    }
+
+    socket.on('adminActionSuccess', (data) => {
+      showSuccess(data.message);
+      loadUsers();
+      loadSpecialRooms();
+    });
+
+    // Helpers
+    function goBack() {
+      window.location.href = '/chat.html';
+    }
+
+    function showError(message) {
+      errorDiv.textContent = message;
+      errorDiv.classList.add('show');
+      setTimeout(() => {
+        errorDiv.classList.remove('show');
+      }, 5000);
+    }
+
+    function showSuccess(message) {
+      successDiv.textContent = message;
+      successDiv.classList.add('show');
+      setTimeout(() => {
+        successDiv.classList.remove('show');
+      }, 3000);
+    }
+  </script>
+</body>
+</html>

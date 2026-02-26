@@ -609,6 +609,156 @@ io.on('connection', (socket) => {
     socket.emit('gameLeaderboard', { gameName, level, leaderboard });
   });
 
+  // Admin: Get all users
+  socket.on('adminGetAllUsers', () => {
+    if (!currentUser || !currentUser.isAdmin) {
+      socket.emit('error', { message: 'Admin access required' });
+      return;
+    }
+
+    const users = userDb.getAll.all();
+    socket.emit('adminUsersList', { users });
+  });
+
+  // Admin: Set user admin status
+  socket.on('adminSetUserAdmin', (data) => {
+    if (!currentUser || !currentUser.isAdmin) {
+      socket.emit('error', { message: 'Admin access required' });
+      return;
+    }
+
+    const { userId, isAdmin } = data;
+    userDb.setAdmin.run(isAdmin ? 1 : 0, userId);
+
+    const user = userDb.findById.get(userId);
+    socket.emit('adminActionSuccess', {
+      message: `用户 ${user.username} ${isAdmin ? '已设置' : '已取消'}管理员权限`
+    });
+
+    console.log(`👑 Admin ${currentUser.username} ${isAdmin ? 'promoted' : 'demoted'} user ${user.username} (ID: ${userId})`);
+  });
+
+  // Admin: Delete user
+  socket.on('adminDeleteUser', (data) => {
+    if (!currentUser || !currentUser.isAdmin) {
+      socket.emit('error', { message: 'Admin access required' });
+      return;
+    }
+
+    const { userId } = data;
+    const user = userDb.findById.get(userId);
+
+    if (!user) {
+      socket.emit('error', { message: 'User not found' });
+      return;
+    }
+
+    if (user.id === currentUser.id) {
+      socket.emit('error', { message: 'Cannot delete yourself' });
+      return;
+    }
+
+    // Delete user (cascades will handle related records)
+    userDb.deleteUser.run(userId);
+
+    socket.emit('adminActionSuccess', {
+      message: `用户 ${user.username} 已删除`
+    });
+
+    console.log(`🗑️  Admin ${currentUser.username} deleted user ${user.username} (ID: ${userId})`);
+  });
+
+  // Admin: Get special rooms (game-lobby, etc.)
+  socket.on('adminGetSpecialRooms', () => {
+    if (!currentUser || !currentUser.isAdmin) {
+      socket.emit('error', { message: 'Admin access required' });
+      return;
+    }
+
+    // Get special rooms (currently just game-lobby)
+    const specialRoomIds = ['game-lobby'];
+    const rooms = [];
+
+    specialRoomIds.forEach(roomId => {
+      const room = roomDb.findById.get(roomId);
+      if (room) {
+        const members = roomDb.getMembers.all(roomId);
+        rooms.push({
+          ...room,
+          members
+        });
+      }
+    });
+
+    const allUsers = userDb.getAll.all();
+
+    socket.emit('adminSpecialRoomsList', { rooms, allUsers });
+  });
+
+  // Admin: Add user to room
+  socket.on('adminAddUserToRoom', (data) => {
+    if (!currentUser || !currentUser.isAdmin) {
+      socket.emit('error', { message: 'Admin access required' });
+      return;
+    }
+
+    const { roomId, userId } = data;
+    roomDb.addMember.run(roomId, userId);
+
+    const user = userDb.findById.get(userId);
+    socket.emit('adminActionSuccess', {
+      message: `用户 ${user.username} 已添加到房间`
+    });
+
+    // If user is online, send them the room update
+    const targetSocketId = onlineUsers.get(userId);
+    if (targetSocketId) {
+      const targetSocket = io.sockets.sockets.get(targetSocketId);
+      if (targetSocket) {
+        const rooms = roomDb.getUserRooms.all(userId);
+        const roomsWithLastMessage = rooms.map(room => {
+          const lastMessage = messageDb.getLastMessage.get(room.id);
+          return { ...room, lastMessage };
+        });
+        targetSocket.emit('roomList', roomsWithLastMessage);
+      }
+    }
+
+    console.log(`➕ Admin ${currentUser.username} added user ${user.username} to room ${roomId}`);
+  });
+
+  // Admin: Remove user from room
+  socket.on('adminRemoveUserFromRoom', (data) => {
+    if (!currentUser || !currentUser.isAdmin) {
+      socket.emit('error', { message: 'Admin access required' });
+      return;
+    }
+
+    const { roomId, userId } = data;
+    roomDb.removeMember.run(roomId, userId);
+
+    const user = userDb.findById.get(userId);
+    socket.emit('adminActionSuccess', {
+      message: `用户 ${user.username} 已从房间移除`
+    });
+
+    // If user is online, send them the room update
+    const targetSocketId = onlineUsers.get(userId);
+    if (targetSocketId) {
+      const targetSocket = io.sockets.sockets.get(targetSocketId);
+      if (targetSocket) {
+        const rooms = roomDb.getUserRooms.all(userId);
+        const roomsWithLastMessage = rooms.map(room => {
+          const lastMessage = messageDb.getLastMessage.get(room.id);
+          return { ...room, lastMessage };
+        });
+        targetSocket.emit('roomList', roomsWithLastMessage);
+      }
+    }
+
+    console.log(`➖ Admin ${currentUser.username} removed user ${user.username} from room ${roomId}`);
+  });
+
   // Disconnect
   socket.on('disconnect', () => {
     if (currentUser) {

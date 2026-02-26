@@ -30,6 +30,11 @@ async function authenticateUser(username, password, isBot = false) {
     } else {
       // User doesn't exist, auto-register
       const passwordHash = await bcrypt.hash(password, 10);
+
+      // Check if this is the first non-bot user
+      const nonBotUsers = userDb.getAll.all().filter(u => u.is_bot === 0);
+      const isFirstUser = nonBotUsers.length === 0 && !isBot;
+
       const result = userDb.create.run(
         username,
         passwordHash,
@@ -38,6 +43,13 @@ async function authenticateUser(username, password, isBot = false) {
       );
 
       user = userDb.findById.get(result.lastInsertRowid);
+
+      // Make first non-bot user admin
+      if (isFirstUser) {
+        userDb.setAdmin.run(1, user.id);
+        user = userDb.findById.get(user.id); // Reload to get updated admin status
+        console.log(`👑 First user ${username} promoted to admin`);
+      }
 
       // Auto-join lobby
       roomDb.addMember.run('lobby', user.id);
@@ -61,7 +73,8 @@ async function authenticateUser(username, password, isBot = false) {
         id: user.id,
         username: user.username,
         displayName: user.display_name,
-        isBot: user.is_bot === 1
+        isBot: user.is_bot === 1,
+        isAdmin: user.is_admin === 1
       },
       token
     };
@@ -88,7 +101,8 @@ function verifyToken(token) {
       id: session.user_id,
       username: session.username,
       displayName: session.display_name,
-      isBot: session.is_bot === 1
+      isBot: session.is_bot === 1,
+      isAdmin: session.is_admin === 1
     };
 
   } catch (error) {

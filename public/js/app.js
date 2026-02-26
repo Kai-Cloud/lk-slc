@@ -64,6 +64,7 @@ const searchResults = document.getElementById('searchResults');
 const toggleSidebar = document.getElementById('toggleSidebar');
 const sidebar = document.getElementById('sidebar');
 const logoutBtn = document.getElementById('logoutBtn');
+const adminBtn = document.getElementById('adminBtn');
 const settingsBtn = document.getElementById('settingsBtn');
 const changePasswordModal = document.getElementById('changePasswordModal');
 const closePasswordModal = document.getElementById('closePasswordModal');
@@ -89,6 +90,11 @@ if (!token || !savedUser) {
 function initChat() {
   // 显示当前用户
   currentUserName.textContent = currentUser.displayName || currentUser.username;
+
+  // Show admin button if user is admin
+  if (currentUser.isAdmin) {
+    adminBtn.style.display = 'block';
+  }
 
   // 连接 Socket.io
   connectSocket();
@@ -125,6 +131,9 @@ function initChat() {
     sidebar.classList.toggle('show');
   });
   logoutBtn.addEventListener('click', logout);
+  adminBtn.addEventListener('click', () => {
+    window.location.href = '/admin.html';
+  });
   settingsBtn.addEventListener('click', showChangePasswordModal);
   closePasswordModal.addEventListener('click', hideChangePasswordModal);
   cancelPasswordChange.addEventListener('click', hideChangePasswordModal);
@@ -171,6 +180,11 @@ function connectSocket() {
   socket.on('loginSuccess', (data) => {
     console.log('✅ Login successful:', data.user);
     currentUser = data.user;
+
+    // Show admin button if user is admin
+    if (currentUser.isAdmin) {
+      adminBtn.style.display = 'block';
+    }
   });
 
   socket.on('loginError', (data) => {

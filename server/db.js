@@ -24,6 +24,7 @@ function initDatabase() {
       password_hash TEXT NOT NULL,
       display_name TEXT,
       is_bot INTEGER DEFAULT 0,
+      is_admin INTEGER DEFAULT 0,
       avatar TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       last_seen DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -142,6 +143,15 @@ function initDatabase() {
     `).run('lobby', '大厅', 'group');
   }
 
+  // Create "Game Lobby" room
+  const gameLobby = db.prepare('SELECT id FROM rooms WHERE id = ?').get('game-lobby');
+  if (!gameLobby) {
+    db.prepare(`
+      INSERT INTO rooms (id, name, type) VALUES (?, ?, ?)
+    `).run('game-lobby', '游戏大厅', 'group');
+    console.log('✅ Game Lobby room created');
+  }
+
   // Database migration: Add pinned column to room_members table (if not exists)
   try {
     const tableInfo = db.prepare("PRAGMA table_info(room_members)").all();
@@ -150,6 +160,27 @@ function initDatabase() {
     if (!hasPinnedColumn) {
       console.log('🔄 Database migration: Adding pinned column to room_members table...');
       db.exec('ALTER TABLE room_members ADD COLUMN pinned INTEGER DEFAULT 0');
+      console.log('✅ Migration complete');
+    }
+  } catch (error) {
+    console.error('⚠️  Database migration warning:', error.message);
+  }
+
+  // Database migration: Add is_admin column to users table (if not exists)
+  try {
+    const usersTableInfo = db.prepare("PRAGMA table_info(users)").all();
+    const hasAdminColumn = usersTableInfo.some(col => col.name === 'is_admin');
+
+    if (!hasAdminColumn) {
+      console.log('🔄 Database migration: Adding is_admin column to users table...');
+      db.exec('ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0');
+
+      // Make first non-bot user admin
+      const firstUser = db.prepare('SELECT id FROM users WHERE is_bot = 0 ORDER BY id ASC LIMIT 1').get();
+      if (firstUser) {
+        db.prepare('UPDATE users SET is_admin = 1 WHERE id = ?').run(firstUser.id);
+        console.log('✅ First user (ID:', firstUser.id, ') promoted to admin');
+      }
       console.log('✅ Migration complete');
     }
   } catch (error) {
@@ -183,14 +214,20 @@ const userDb = {
   updatePassword: db.prepare('UPDATE users SET password_hash = ? WHERE id = ?'),
 
   // Get all users
-  getAll: db.prepare('SELECT id, username, display_name, is_bot, last_seen FROM users'),
+  getAll: db.prepare('SELECT id, username, display_name, is_bot, is_admin, last_seen FROM users'),
 
   // Get online users (active within last 5 minutes)
   getOnline: db.prepare(`
-    SELECT id, username, display_name, is_bot, last_seen
+    SELECT id, username, display_name, is_bot, is_admin, last_seen
     FROM users
     WHERE datetime(last_seen) > datetime('now', '-5 minutes')
-  `)
+  `),
+
+  // Set user as admin
+  setAdmin: db.prepare('UPDATE users SET is_admin = ? WHERE id = ?'),
+
+  // Delete user
+  deleteUser: db.prepare('DELETE FROM users WHERE id = ?')
 };
 
 // Room operations
@@ -316,7 +353,7 @@ const sessionDb = {
 
   // Find session
   findByToken: db.prepare(`
-    SELECT s.*, u.id as user_id, u.username, u.display_name, u.is_bot
+    SELECT s.*, u.id as user_id, u.username, u.display_name, u.is_bot, u.is_admin
     FROM sessions s
     JOIN users u ON s.user_id = u.id
     WHERE s.token = ? AND datetime(s.expires_at) > datetime('now')
