@@ -94,9 +94,11 @@ io.on('connection', (socket) => {
     // Send room list
     const roomsWithLastMessage = rooms.map(room => {
       const lastMessage = messageDb.getLastMessage.get(room.id);
+      const members = roomDb.getMembers.all(room.id);
       return {
         ...room,
-        lastMessage
+        lastMessage,
+        members
       };
     });
 
@@ -177,9 +179,11 @@ io.on('connection', (socket) => {
     // Send room list (with unread counts)
     const roomsWithLastMessage = rooms.map(room => {
       const lastMessage = messageDb.getLastMessage.get(room.id);
+      const members = roomDb.getMembers.all(room.id);
       return {
         ...room,
         lastMessage,
+        members,
         unreadCount: unreadMap[room.id] || 0
       };
     });
@@ -559,7 +563,8 @@ io.on('connection', (socket) => {
     const rooms = roomDb.getUserRooms.all(currentUser.id);
     const roomsWithLastMessage = rooms.map(room => {
       const lastMessage = messageDb.getLastMessage.get(room.id);
-      return { ...room, lastMessage };
+      const members = roomDb.getMembers.all(room.id);
+      return { ...room, lastMessage, members };
     });
 
     socket.emit('roomList', roomsWithLastMessage);
@@ -870,7 +875,8 @@ io.on('connection', (socket) => {
         const rooms = roomDb.getUserRooms.all(userId);
         const roomsWithLastMessage = rooms.map(room => {
           const lastMessage = messageDb.getLastMessage.get(room.id);
-          return { ...room, lastMessage };
+          const members = roomDb.getMembers.all(room.id);
+          return { ...room, lastMessage, members };
         });
         targetSocket.emit('roomList', roomsWithLastMessage);
       }
@@ -902,7 +908,8 @@ io.on('connection', (socket) => {
         const rooms = roomDb.getUserRooms.all(userId);
         const roomsWithLastMessage = rooms.map(room => {
           const lastMessage = messageDb.getLastMessage.get(room.id);
-          return { ...room, lastMessage };
+          const members = roomDb.getMembers.all(room.id);
+          return { ...room, lastMessage, members };
         });
         targetSocket.emit('roomList', roomsWithLastMessage);
       }
@@ -939,7 +946,8 @@ io.on('connection', (socket) => {
             const rooms = roomDb.getUserRooms.all(user.id);
             const roomsWithLastMessage = rooms.map(room => {
               const lastMessage = messageDb.getLastMessage.get(room.id);
-              return { ...room, lastMessage };
+              const members = roomDb.getMembers.all(room.id);
+              return { ...room, lastMessage, members };
             });
             targetSocket.emit('roomList', roomsWithLastMessage);
           }
@@ -965,7 +973,8 @@ io.on('connection', (socket) => {
             const rooms = roomDb.getUserRooms.all(user.id);
             const roomsWithLastMessage = rooms.map(room => {
               const lastMessage = messageDb.getLastMessage.get(room.id);
-              return { ...room, lastMessage };
+              const members = roomDb.getMembers.all(room.id);
+              return { ...room, lastMessage, members };
             });
             targetSocket.emit('roomList', roomsWithLastMessage);
           }
