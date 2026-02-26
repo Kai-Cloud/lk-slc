@@ -457,14 +457,20 @@ function renderUserList() {
       </div>
     `);
 
-  // Add Game Lobby as a virtual user (always online, always at the top)
-  const gameLobbyItem = `
-    <div class="user-item game-lobby-user" data-special="game-lobby">
-      <div class="user-item-avatar">🎮</div>
-      <div class="user-item-name">游戏大厅 / Game Lobby</div>
-      <div class="user-item-status online"></div>
-    </div>
-  `;
+  // Check if user has access to game-lobby room
+  const hasGameLobbyAccess = rooms.some(room => room.id === 'game-lobby');
+
+  // Add Game Lobby as a virtual user only if user has access
+  let gameLobbyItem = '';
+  if (hasGameLobbyAccess) {
+    gameLobbyItem = `
+      <div class="user-item game-lobby-user" data-special="game-lobby">
+        <div class="user-item-avatar">🎮</div>
+        <div class="user-item-name">游戏大厅 / Game Lobby</div>
+        <div class="user-item-status online"></div>
+      </div>
+    `;
+  }
 
   userList.innerHTML = gameLobbyItem + userItems.join('');
 
