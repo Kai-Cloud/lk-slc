@@ -216,6 +216,21 @@ function connectSocket() {
 
     renderRoomList();
 
+    // Check if current room is still accessible
+    if (currentRoom) {
+      const stillHasAccess = rooms.some(room => room.id === currentRoom.id);
+      if (!stillHasAccess) {
+        // User no longer has access to current room, switch to lobby
+        console.log(`⚠️ Access to room ${currentRoom.id} removed, switching to lobby`);
+        const lobbyRoom = rooms.find(room => room.id === 'lobby');
+        if (lobbyRoom) {
+          selectRoom(lobbyRoom);
+        } else if (rooms.length > 0) {
+          selectRoom(rooms[0]);
+        }
+      }
+    }
+
     // Auto-select first room (lobby)
     if (rooms.length > 0 && !currentRoom) {
       selectRoom(rooms[0]);
