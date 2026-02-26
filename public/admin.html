@@ -296,8 +296,25 @@
 
     socket.on('connect', () => {
       console.log('Connected to server');
+      // Authenticate with token before loading admin data
+      console.log('🔐 Sending loginWithToken...');
+      socket.emit('loginWithToken', { token });
+    });
+
+    socket.on('loginSuccess', (data) => {
+      console.log('✅ Admin authenticated successfully:', data.user);
+      console.log('🔍 Admin - loginSuccess isAdmin:', data.user.isAdmin);
+      // Now load admin data after authentication succeeds
       loadUsers();
       loadSpecialRooms();
+    });
+
+    socket.on('loginError', (data) => {
+      console.log('❌ Admin login failed:', data.message);
+      showError(data.message);
+      setTimeout(() => {
+        window.location.href = '/index.html';
+      }, 2000);
     });
 
     socket.on('error', (data) => {
