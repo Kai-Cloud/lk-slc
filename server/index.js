@@ -2,6 +2,7 @@ const express = require('express');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
+const { execSync } = require('child_process');
 require('dotenv').config();
 
 const { db, initDatabase, userDb, roomDb, messageDb, unreadDb, gameDb, getOrCreatePrivateRoom } = require('./db');
@@ -28,6 +29,19 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 // Maps /games/* -> ../lk-sgl/*
 app.use('/games', express.static(path.join(__dirname, '..', '..', 'lk-sgl')));
 console.log('📦 Game plugin directory:', path.join(__dirname, '..', '..', 'lk-sgl'));
+
+// Get version info from git
+app.get('/api/version', (req, res) => {
+  try {
+    const commitDate = execSync('git log -1 --format=%cd --date=format:%Y%m%d', { encoding: 'utf-8' }).trim();
+    const commitHash = execSync('git log -1 --format=%h', { encoding: 'utf-8' }).trim();
+    const version = `${commitDate}-${commitHash}`;
+    res.json({ version });
+  } catch (error) {
+    // If git not available or not a git repo, return fallback version
+    res.json({ version: 'dev-build' });
+  }
+});
 
 // Online users mapping { userId: socketId }
 const onlineUsers = new Map();

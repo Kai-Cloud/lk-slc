@@ -187,6 +187,15 @@
       box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
     }
 
+    /* Version Display */
+    .version {
+      margin-top: 20px;
+      text-align: center;
+      font-size: 12px;
+      color: #999;
+      font-family: 'Courier New', monospace;
+    }
+
     @media (max-width: 480px) {
       .container {
         padding: 30px 20px;
@@ -256,6 +265,8 @@
       • 登录后自动加入"大厅"群聊<br>
       • Bot 用户名建议以 "-bot" 结尾</span>
     </div>
+
+    <div class="version" id="version">Loading version...</div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
@@ -402,6 +413,16 @@
         form.dispatchEvent(new Event('submit'));
       }
     });
+
+    // Load and display version
+    fetch('/api/version')
+      .then(res => res.json())
+      .then(data => {
+        document.getElementById('version').textContent = `v${data.version}`;
+      })
+      .catch(() => {
+        document.getElementById('version').textContent = 'v-unknown';
+      });
   </script>
 </body>
 </html>
