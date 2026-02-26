@@ -123,6 +123,15 @@ function initDatabase() {
     )
   `);
 
+  // Server settings table (key-value store for server configuration)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS server_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   // Create indexes
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_messages_room ON messages(room_id, created_at DESC);
@@ -233,6 +242,13 @@ function initDatabase() {
     console.error('⚠️  Database migration warning:', error.message);
   }
 
+  // Initialize server settings with defaults
+  try {
+    db.prepare('INSERT OR IGNORE INTO server_settings (key, value) VALUES (?, ?)').run('registration_enabled', '1');
+  } catch (error) {
+    console.error('⚠️  Server settings initialization warning:', error.message);
+  }
+
   console.log('✅ Database initialized:', dbPath);
 }
 
@@ -287,7 +303,11 @@ const userDb = {
   `),
 
   // Reset failed login attempts on successful login
-  resetFailedAttempts: db.prepare('UPDATE users SET failed_login_attempts = 0, last_failed_login = NULL WHERE id = ?')
+  resetFailedAttempts: db.prepare('UPDATE users SET failed_login_attempts = 0, last_failed_login = NULL WHERE id = ?'),
+
+  // Server settings operations
+  getSetting: db.prepare('SELECT value FROM server_settings WHERE key = ?'),
+  updateSetting: db.prepare('UPDATE server_settings SET value = ?, updated_at = CURRENT_TIMESTAMP WHERE key = ?')
 };
 
 // Room operations

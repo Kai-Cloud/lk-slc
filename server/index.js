@@ -985,6 +985,62 @@ io.on('connection', (socket) => {
     }, 500);
   });
 
+  // Admin: Get server settings
+  socket.on('adminGetServerSettings', () => {
+    if (!currentUser || !currentUser.isAdmin) {
+      socket.emit('error', { message: 'Admin access required' });
+      return;
+    }
+
+    try {
+      const registrationSetting = userDb.getSetting.get('registration_enabled');
+      const registrationEnabled = !registrationSetting || registrationSetting.value === '1';
+
+      socket.emit('adminServerSettings', {
+        registrationEnabled
+      });
+    } catch (error) {
+      console.error('❌ Failed to load server settings:', error);
+      socket.emit('error', { message: 'Failed to load settings' });
+    }
+  });
+
+  // Admin: Update server settings
+  socket.on('adminUpdateServerSettings', (data) => {
+    if (!currentUser || !currentUser.isAdmin) {
+      socket.emit('error', { message: 'Admin access required' });
+      return;
+    }
+
+    const { key, value } = data;
+
+    // Whitelist valid setting keys for security
+    if (key !== 'registration_enabled') {
+      socket.emit('error', { message: 'Invalid setting key' });
+      return;
+    }
+
+    // Validate value format
+    if (value !== '0' && value !== '1') {
+      socket.emit('error', { message: 'Invalid setting value. Expected "0" or "1"' });
+      return;
+    }
+
+    try {
+      userDb.updateSetting.run(value, key);
+
+      const statusText = value === '1' ? '已启用' : '已禁用';
+      socket.emit('adminSettingsUpdated', {
+        message: `新用户注册功能${statusText}`
+      });
+
+      console.log(`⚙️  Admin ${currentUser.username} updated setting: registration_enabled = ${value}`);
+    } catch (error) {
+      console.error('❌ Failed to update server settings:', error);
+      socket.emit('error', { message: 'Failed to save settings' });
+    }
+  });
+
   // Disconnect
   socket.on('disconnect', () => {
     if (currentUser) {

@@ -14,6 +14,15 @@ async function authenticateUser(username, password, isBot = false) {
       return { success: false, error: 'Username and password required' };
     }
 
+    // Validate username format (alphanumeric, Chinese, underscore, hyphen, max 10 chars)
+    const usernameRegex = /^[\w\-\u4E00-\u9FFF]{1,10}$/;
+    if (!usernameRegex.test(username)) {
+      return {
+        success: false,
+        error: 'Username must be 1-10 characters and contain only letters, numbers, Chinese characters, underscore, or hyphen. / 用户名必须为1-10个字符，只能包含字母、数字、中文、下划线或横杠。'
+      };
+    }
+
     // Find user
     let user = userDb.findByUsername.get(username);
 
@@ -53,6 +62,19 @@ async function authenticateUser(username, password, isBot = false) {
       userDb.updateLastSeen.run(user.id);
 
     } else {
+      // Check if registration is enabled (unless this is a bot)
+      if (!isBot) {
+        const registrationSetting = userDb.getSetting.get('registration_enabled');
+        const registrationEnabled = !registrationSetting || registrationSetting.value === '1';
+
+        if (!registrationEnabled) {
+          return {
+            success: false,
+            error: 'New user registration is currently disabled. Please contact administrator.'
+          };
+        }
+      }
+
       // User doesn't exist, auto-register
       const passwordHash = await bcrypt.hash(password, 10);
 

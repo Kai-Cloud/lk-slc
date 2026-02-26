@@ -248,6 +248,26 @@
         <div class="loading">加载中...</div>
       </div>
     </div>
+
+    <!-- Server Settings Section -->
+    <div class="section">
+      <h2>⚙️ 服务器设置</h2>
+      <div style="background: #f5f5f5; padding: 20px; border-radius: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+          <label style="margin: 0; font-size: 16px; cursor: pointer;">
+            <input type="checkbox" id="registrationEnabledCheckbox"
+                   style="width: auto; margin-right: 10px; cursor: pointer;">
+            <span>允许新用户注册</span>
+          </label>
+          <button class="btn btn-primary btn-small" onclick="saveRegistrationSetting()">
+            保存设置
+          </button>
+        </div>
+        <p style="color: #888; font-size: 13px; margin: 0;">
+          💡 禁用后，现有用户可以继续登录，但新用户无法创建账号
+        </p>
+      </div>
+    </div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
@@ -307,6 +327,7 @@
       // Now load admin data after authentication succeeds
       loadUsers();
       loadSpecialRooms();
+      loadServerSettings();
     });
 
     socket.on('loginError', (data) => {
@@ -374,23 +395,23 @@
             <td>
               <div class="actions">
                 ${!user.is_admin ?
-                  `<button class="btn btn-primary btn-small" onclick="promoteToAdmin(${user.id}, '${user.username}')">
+                  `<button class="btn btn-primary btn-small admin-action" data-action="promoteToAdmin" data-user-id="${user.id}" data-username="${escapeHtml(user.username)}">
                     设为管理员
                   </button>` :
                   user.id !== currentUser.id ?
-                    `<button class="btn btn-secondary btn-small" onclick="demoteFromAdmin(${user.id}, '${user.username}')">
+                    `<button class="btn btn-secondary btn-small admin-action" data-action="demoteFromAdmin" data-user-id="${user.id}" data-username="${escapeHtml(user.username)}">
                       取消管理员
                     </button>` : ''
                 }
                 ${user.id !== currentUser.id ?
-                  `<button class="btn ${user.is_banned ? 'btn-primary' : 'btn-secondary'} btn-small"
-                          onclick="${user.is_banned ? 'unbanUser' : 'banUser'}(${user.id}, '${user.username}')">
+                  `<button class="btn ${user.is_banned ? 'btn-primary' : 'btn-secondary'} btn-small admin-action"
+                          data-action="${user.is_banned ? 'unbanUser' : 'banUser'}" data-user-id="${user.id}" data-username="${escapeHtml(user.username)}">
                     ${user.is_banned ? '解封' : '封禁'}
                   </button>
-                  <button class="btn btn-secondary btn-small" onclick="resetPassword(${user.id}, '${user.username}')">
+                  <button class="btn btn-secondary btn-small admin-action" data-action="resetPassword" data-user-id="${user.id}" data-username="${escapeHtml(user.username)}">
                     重置密码
                   </button>
-                  <button class="btn btn-danger btn-small" onclick="deleteUser(${user.id}, '${user.username}')">
+                  <button class="btn btn-danger btn-small admin-action" data-action="deleteUser" data-user-id="${user.id}" data-username="${escapeHtml(user.username)}">
                     删除
                   </button>` : ''
                 }
@@ -438,8 +459,8 @@
                 <span style="color: #666; font-size: 14px;">
                   ${allVisible ? '✅ 全体可见' : '⚠️ 部分可见'}
                 </span>
-                <button class="btn ${allVisible ? 'btn-danger' : 'btn-primary'} btn-small"
-                        onclick="toggleRoomVisibility('${room.id}', ${!allVisible})">
+                <button class="btn ${allVisible ? 'btn-danger' : 'btn-primary'} btn-small room-visibility-action"
+                        data-action="toggleRoomVisibility" data-room-id="${escapeHtml(room.id)}" data-make-visible="${!allVisible}">
                   ${allVisible ? '设为全体不可见' : '设为全体可见'}
                 </button>
               </div>
@@ -473,10 +494,10 @@
               </td>
               <td>
                 ${hasAccess ?
-                  `<button class="btn btn-danger btn-small" onclick="removeFromRoom('${room.id}', ${user.id}, '${user.username}')">
+                  `<button class="btn btn-danger btn-small room-action" data-action="removeFromRoom" data-room-id="${escapeHtml(room.id)}" data-user-id="${user.id}" data-username="${escapeHtml(user.username)}">
                     移除
                   </button>` :
-                  `<button class="btn btn-primary btn-small" onclick="addToRoom('${room.id}', ${user.id}, '${user.username}')">
+                  `<button class="btn btn-primary btn-small room-action" data-action="addToRoom" data-room-id="${escapeHtml(room.id)}" data-user-id="${user.id}" data-username="${escapeHtml(user.username)}">
                     添加
                   </button>`
                 }
@@ -558,6 +579,32 @@
       }
     }
 
+    // Load server settings
+    function loadServerSettings() {
+      socket.emit('adminGetServerSettings');
+    }
+
+    socket.on('adminServerSettings', (data) => {
+      const checkbox = document.getElementById('registrationEnabledCheckbox');
+      if (checkbox) {
+        checkbox.checked = data.registrationEnabled;
+      }
+    });
+
+    function saveRegistrationSetting() {
+      const checkbox = document.getElementById('registrationEnabledCheckbox');
+      const newValue = checkbox.checked ? '1' : '0';
+
+      socket.emit('adminUpdateServerSettings', {
+        key: 'registration_enabled',
+        value: newValue
+      });
+    }
+
+    socket.on('adminSettingsUpdated', (data) => {
+      showSuccess(data.message || '设置已保存');
+    });
+
     socket.on('adminActionSuccess', (data) => {
       showSuccess(data.message);
       loadUsers();
@@ -568,7 +615,70 @@
       loadSpecialRooms();
     });
 
+    // Event delegation for admin actions (XSS security fix)
+    document.addEventListener('click', (e) => {
+      const target = e.target.closest('.admin-action');
+      if (target) {
+        const action = target.dataset.action;
+        const userId = parseInt(target.dataset.userId);
+        const username = target.dataset.username;
+
+        switch (action) {
+          case 'promoteToAdmin':
+            promoteToAdmin(userId, username);
+            break;
+          case 'demoteFromAdmin':
+            demoteFromAdmin(userId, username);
+            break;
+          case 'banUser':
+            banUser(userId, username);
+            break;
+          case 'unbanUser':
+            unbanUser(userId, username);
+            break;
+          case 'resetPassword':
+            resetPassword(userId, username);
+            break;
+          case 'deleteUser':
+            deleteUser(userId, username);
+            break;
+        }
+      }
+
+      // Handle room actions
+      const roomTarget = e.target.closest('.room-action');
+      if (roomTarget) {
+        const action = roomTarget.dataset.action;
+        const roomId = roomTarget.dataset.roomId;
+        const userId = parseInt(roomTarget.dataset.userId);
+        const username = roomTarget.dataset.username;
+
+        switch (action) {
+          case 'addToRoom':
+            addToRoom(roomId, userId, username);
+            break;
+          case 'removeFromRoom':
+            removeFromRoom(roomId, userId, username);
+            break;
+        }
+      }
+
+      // Handle room visibility actions
+      const visibilityTarget = e.target.closest('.room-visibility-action');
+      if (visibilityTarget) {
+        const roomId = visibilityTarget.dataset.roomId;
+        const makeVisible = visibilityTarget.dataset.makeVisible === 'true';
+        toggleRoomVisibility(roomId, makeVisible);
+      }
+    });
+
     // Helpers
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
     function goBack() {
       window.location.href = '/chat.html';
     }
