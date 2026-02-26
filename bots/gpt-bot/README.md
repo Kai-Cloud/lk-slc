@@ -1,6 +1,6 @@
-# GPT-4o Bot
+# GPT Bot
 
-基于 OpenAI GPT-4o 的智能聊天机器人。
+基于 OpenAI GPT-4o 或 DeepSeek 的智能聊天机器人。
 
 ## 快速开始
 
@@ -12,11 +12,21 @@
 
    编辑 `.env` 文件，填入你的配置：
 
+   **使用 GPT-4o:**
    ```env
    SERVER_URL=http://localhost:3030
    BOT_PASSWORD=your-secure-password
    FOUNDRY_ENDPOINT=https://your-endpoint.azure.com/v1/chat/completions
    FOUNDRY_API_KEY=your-api-key
+   ```
+
+   **使用 DeepSeek:**
+   ```env
+   SERVER_URL=http://localhost:3030
+   BOT_PASSWORD=your-secure-password
+   FOUNDRY_ENDPOINT=https://kaili-mcka2rzi-eastus2.services.ai.azure.com/models/chat/completions?api-version=2024-05-01-preview
+   FOUNDRY_API_KEY=your-api-key
+   MODEL_NAME=DeepSeek-V3-0324
    ```
 
    > 注意：Bot 用户名将自动使用文件夹名称（本例中为 `gpt-bot`）
@@ -39,7 +49,7 @@
 - ✅ 自动使用文件夹名称作为 Bot 用户名
 - ✅ 支持群聊 @ 提及触发回复
 - ✅ 支持私聊直接对话
-- ✅ 基于 GPT-4o 的智能回复
+- ✅ 支持多种 AI 模型（GPT-4o、DeepSeek 等）
 - ✅ 自动重连机制
 - ✅ 支持自签名 SSL 证书
 
@@ -88,12 +98,13 @@
 ### 必需配置
 
 - `BOT_PASSWORD`: Bot 登录密码（首次登录会自动注册）
-- `FOUNDRY_ENDPOINT`: GPT-4o API 端点
-- `FOUNDRY_API_KEY`: GPT-4o API 密钥
+- `FOUNDRY_ENDPOINT`: AI API 端点
+- `FOUNDRY_API_KEY`: AI API 密钥
 
 ### 可选配置
 
 - `SERVER_URL`: 聊天服务器地址（默认：`http://localhost:3030`）
+- `MODEL_NAME`: AI 模型名称（例如：`DeepSeek-V3-0324`，部分模型需要指定）
 - `REJECT_UNAUTHORIZED`: SSL 证书验证（默认：`true`，如果使用自签名证书，设为 `false`）
 
 ## 注意事项

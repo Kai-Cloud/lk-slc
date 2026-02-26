@@ -11,6 +11,7 @@ const BOT_USERNAME = path.basename(__dirname);
 const BOT_PASSWORD = process.env.BOT_PASSWORD;
 const FOUNDRY_ENDPOINT = process.env.FOUNDRY_ENDPOINT;
 const FOUNDRY_API_KEY = process.env.FOUNDRY_API_KEY;
+const MODEL_NAME = process.env.MODEL_NAME; // Optional: e.g., "DeepSeek-V3-0324"
 const REJECT_UNAUTHORIZED = process.env.REJECT_UNAUTHORIZED !== 'false'; // Default: verify certificates
 
 // If certificate verification is disabled, show warning
@@ -27,32 +28,40 @@ if (!BOT_PASSWORD) {
 }
 
 if (!FOUNDRY_ENDPOINT || !FOUNDRY_API_KEY) {
-  console.error('❌ Error: Missing Foundry GPT-4o configuration');
+  console.error('❌ Error: Missing Foundry gpt-bot configuration');
   console.error('Please set in .env file:');
   console.error('  FOUNDRY_ENDPOINT=https://your-endpoint.azure.com/v1/chat/completions');
   console.error('  FOUNDRY_API_KEY=your-api-key');
   process.exit(1);
 }
 
-// Call GPT-4o
-async function callGPT4o(userMessage) {
+// Call gpt-bot
+async function callGPT(userMessage) {
   try {
+    // Build request body
+    const requestBody = {
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a friendly AI assistant helping users answer questions in a LAN chat room. Please respond in a concise and friendly manner.'
+        },
+        {
+          role: 'user',
+          content: userMessage
+        }
+      ],
+      temperature: 0.7,
+      max_tokens: 2000
+    };
+
+    // Add model parameter if specified (required for some models like DeepSeek)
+    if (MODEL_NAME) {
+      requestBody.model = MODEL_NAME;
+    }
+
     const response = await axios.post(
       FOUNDRY_ENDPOINT,
-      {
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a friendly AI assistant helping users answer questions in a LAN chat room. Please respond in a concise and friendly manner.'
-          },
-          {
-            role: 'user',
-            content: userMessage
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 2000
-      },
+      requestBody,
       {
         headers: {
           'Content-Type': 'application/json',
@@ -64,7 +73,7 @@ async function callGPT4o(userMessage) {
     return response.data.choices[0].message.content;
   } catch (error) {
     const errorData = error.response ? error.response.data : null;
-    console.error('❌ GPT-4o call failed:', errorData || error.message);
+    console.error('❌ gpt-bot call failed:', errorData || error.message);
     return 'Sorry, I encountered an issue and cannot answer your question at the moment.';
   }
 }
@@ -72,14 +81,18 @@ async function callGPT4o(userMessage) {
 // Main function
 async function main() {
   console.log('\n========================================');
-  console.log('🤖 GPT-4o Bot starting...');
+  console.log('🤖 GPT Bot starting...');
   console.log('========================================\n');
 
   // First login via HTTP API to get token
   let token;
   try {
     console.log(`📡 Logging in to server: ${SERVER_URL}`);
-    console.log(`👤 Bot username: ${BOT_USERNAME}\n`);
+    console.log(`👤 Bot username: ${BOT_USERNAME}`);
+    if (MODEL_NAME) {
+      console.log(`🧠 AI Model: ${MODEL_NAME}`);
+    }
+    console.log('');
 
     // Configure axios to allow ignoring self-signed certificates
     const axiosConfig = {
@@ -252,7 +265,7 @@ async function main() {
     if (!userQuestion) {
       socket.emit('sendMessage', {
         roomId: message.room_id,
-        text: 'Hello! I am GPT-4o assistant. ' + (isPrivateChat ? 'You can ask questions directly in private chat!' : 'Use @' + currentUser.username + ' question to ask!')
+        text: 'Hello! I am gpt-bot assistant. ' + (isPrivateChat ? 'You can ask questions directly in private chat!' : 'Use @' + currentUser.username + ' question to ask!')
       });
       return;
     }
@@ -265,9 +278,9 @@ async function main() {
     console.log(`❓ Question: ${userQuestion}`);
     console.log('');
 
-    // Call GPT-4o
+    // Call gpt-bot
     console.log('🤔 Thinking...');
-    const reply = await callGPT4o(userQuestion);
+    const reply = await callGPT(userQuestion);
 
     console.log('💬 Reply: ' + reply.substring(0, 100) + (reply.length > 100 ? '...' : ''));
     console.log('');
