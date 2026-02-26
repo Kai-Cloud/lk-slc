@@ -26,8 +26,28 @@ async function authenticateUser(username, password, isBot = false) {
       // Verify password
       const isValid = await bcrypt.compare(password, user.password_hash);
       if (!isValid) {
-        return { success: false, error: 'Invalid password' };
+        // Increment failed login attempts
+        userDb.incrementFailedAttempts.run(user.id);
+
+        // Reload user to get updated failed attempts count
+        user = userDb.findById.get(user.id);
+
+        // Auto-ban if 5 or more consecutive failed attempts
+        if (user.failed_login_attempts >= 5) {
+          userDb.setBanned.run(1, user.id);
+          console.log(`🚫 User ${username} (ID: ${user.id}) auto-banned after ${user.failed_login_attempts} failed login attempts`);
+          return { success: false, error: 'Your account has been banned due to too many failed login attempts. Please contact administrator.' };
+        }
+
+        const remainingAttempts = 5 - user.failed_login_attempts;
+        return {
+          success: false,
+          error: `Invalid password. ${remainingAttempts} attempt${remainingAttempts !== 1 ? 's' : ''} remaining before account is banned.`
+        };
       }
+
+      // Password is correct, reset failed attempts counter
+      userDb.resetFailedAttempts.run(user.id);
 
       // Update last seen time
       userDb.updateLastSeen.run(user.id);

@@ -150,16 +150,17 @@ function initDatabase() {
       INSERT INTO rooms (id, name, type) VALUES (?, ?, ?)
     `).run('game-lobby', '游戏大厅', 'group');
     console.log('✅ Game Lobby room created');
-  }
 
-  // Ensure all existing users are members of game-lobby (default visible to all)
-  const allUsers = db.prepare('SELECT id FROM users').all();
-  const addMemberStmt = db.prepare('INSERT OR IGNORE INTO room_members (room_id, user_id) VALUES (?, ?)');
-  allUsers.forEach(user => {
-    addMemberStmt.run('game-lobby', user.id);
-  });
-  if (allUsers.length > 0) {
-    console.log(`✅ Game Lobby made visible to all ${allUsers.length} users`);
+    // Only add users to game-lobby when first creating the room
+    // After that, admin controls visibility via room_members table
+    const allUsers = db.prepare('SELECT id FROM users').all();
+    const addMemberStmt = db.prepare('INSERT OR IGNORE INTO room_members (room_id, user_id) VALUES (?, ?)');
+    allUsers.forEach(user => {
+      addMemberStmt.run('game-lobby', user.id);
+    });
+    if (allUsers.length > 0) {
+      console.log(`✅ Game Lobby made visible to all ${allUsers.length} users`);
+    }
   }
 
   // Database migration: Add pinned column to room_members table (if not exists)
@@ -211,6 +212,27 @@ function initDatabase() {
     console.error('⚠️  Database migration warning:', error.message);
   }
 
+  // Database migration: Add failed login tracking columns (if not exists)
+  try {
+    const usersTableInfo = db.prepare("PRAGMA table_info(users)").all();
+    const hasFailedAttemptsColumn = usersTableInfo.some(col => col.name === 'failed_login_attempts');
+    const hasLastFailedLoginColumn = usersTableInfo.some(col => col.name === 'last_failed_login');
+
+    if (!hasFailedAttemptsColumn) {
+      console.log('🔄 Database migration: Adding failed_login_attempts column to users table...');
+      db.exec('ALTER TABLE users ADD COLUMN failed_login_attempts INTEGER DEFAULT 0');
+      console.log('✅ Migration complete');
+    }
+
+    if (!hasLastFailedLoginColumn) {
+      console.log('🔄 Database migration: Adding last_failed_login column to users table...');
+      db.exec('ALTER TABLE users ADD COLUMN last_failed_login DATETIME');
+      console.log('✅ Migration complete');
+    }
+  } catch (error) {
+    console.error('⚠️  Database migration warning:', error.message);
+  }
+
   console.log('✅ Database initialized:', dbPath);
 }
 
@@ -254,7 +276,18 @@ const userDb = {
   setBanned: db.prepare('UPDATE users SET is_banned = ? WHERE id = ?'),
 
   // Delete user
-  deleteUser: db.prepare('DELETE FROM users WHERE id = ?')
+  deleteUser: db.prepare('DELETE FROM users WHERE id = ?'),
+
+  // Increment failed login attempts
+  incrementFailedAttempts: db.prepare(`
+    UPDATE users
+    SET failed_login_attempts = failed_login_attempts + 1,
+        last_failed_login = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `),
+
+  // Reset failed login attempts on successful login
+  resetFailedAttempts: db.prepare('UPDATE users SET failed_login_attempts = 0, last_failed_login = NULL WHERE id = ?')
 };
 
 // Room operations
