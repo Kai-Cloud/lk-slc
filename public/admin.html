@@ -415,9 +415,30 @@
         const members = room.members || [];
         const memberIds = new Set(members.map(m => m.id));
 
+        // Filter out admins - they always have access and shouldn't be in the list
+        const nonAdminUsers = allUsers.filter(u => !u.is_admin);
+
+        // Count non-admin members
+        const nonAdminMembers = members.filter(m => !m.is_admin);
+        const allVisible = nonAdminMembers.length === nonAdminUsers.length && nonAdminUsers.length > 0;
+
         html += `
           <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-            <h3 style="margin-bottom: 15px;">${room.name} (${room.id})</h3>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+              <h3 style="margin: 0;">${room.name} (${room.id})</h3>
+              <div style="display: flex; gap: 10px; align-items: center;">
+                <span style="color: #666; font-size: 14px;">
+                  ${allVisible ? '✅ 全体可见' : '⚠️ 部分可见'}
+                </span>
+                <button class="btn ${allVisible ? 'btn-danger' : 'btn-primary'} btn-small"
+                        onclick="toggleRoomVisibility('${room.id}', ${!allVisible})">
+                  ${allVisible ? '设为全体不可见' : '设为全体可见'}
+                </button>
+              </div>
+            </div>
+            <p style="color: #888; font-size: 12px; margin-bottom: 15px;">
+              💡 管理员始终可见所有房间，不受此控制影响
+            </p>
             <table>
               <thead>
                 <tr>
@@ -429,13 +450,12 @@
               <tbody>
         `;
 
-        allUsers.forEach(user => {
+        nonAdminUsers.forEach(user => {
           const hasAccess = memberIds.has(user.id);
           html += `
             <tr>
               <td>
                 ${user.username}
-                ${user.is_admin ? '<span class="badge badge-admin">管理员</span>' : ''}
                 ${user.is_bot ? '<span class="badge badge-bot">Bot</span>' : ''}
               </td>
               <td>
@@ -498,9 +518,20 @@
       }
     }
 
+    function toggleRoomVisibility(roomId, makeVisible) {
+      const action = makeVisible ? '全体可见' : '全体不可见';
+      if (confirm(`确定要将此房间设为${action}吗？`)) {
+        socket.emit('adminToggleRoomVisibility', { roomId, makeVisible });
+      }
+    }
+
     socket.on('adminActionSuccess', (data) => {
       showSuccess(data.message);
       loadUsers();
+      loadSpecialRooms();
+    });
+
+    socket.on('reloadSpecialRooms', () => {
       loadSpecialRooms();
     });
 

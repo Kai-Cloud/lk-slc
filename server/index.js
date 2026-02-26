@@ -126,6 +126,14 @@ io.on('connection', (socket) => {
     // Update last seen time
     userDb.updateLastSeen.run(user.id);
 
+    // If user is admin, ensure they're in all special rooms (admins always have access)
+    if (user.isAdmin) {
+      const specialRoomIds = ['game-lobby'];
+      specialRoomIds.forEach(roomId => {
+        roomDb.addMember.run(roomId, user.id);
+      });
+    }
+
     // Get user's all rooms
     const rooms = roomDb.getUserRooms.all(user.id);
 
@@ -761,6 +769,80 @@ io.on('connection', (socket) => {
     }
 
     console.log(`➖ Admin ${currentUser.username} removed user ${user.username} from room ${roomId}`);
+  });
+
+  // Admin: Toggle room visibility for all non-admin users
+  socket.on('adminToggleRoomVisibility', (data) => {
+    if (!currentUser || !currentUser.isAdmin) {
+      socket.emit('error', { message: 'Admin access required' });
+      return;
+    }
+
+    const { roomId, makeVisible } = data;
+
+    // Get all non-admin users
+    const allUsers = userDb.getAll.all();
+    const nonAdminUsers = allUsers.filter(u => u.is_admin === 0);
+
+    let successCount = 0;
+
+    if (makeVisible) {
+      // Add all non-admin users to the room
+      nonAdminUsers.forEach(user => {
+        roomDb.addMember.run(roomId, user.id);
+
+        // If user is online, send them the room update
+        const targetSocketId = onlineUsers.get(user.id);
+        if (targetSocketId) {
+          const targetSocket = io.sockets.sockets.get(targetSocketId);
+          if (targetSocket) {
+            const rooms = roomDb.getUserRooms.all(user.id);
+            const roomsWithLastMessage = rooms.map(room => {
+              const lastMessage = messageDb.getLastMessage.get(room.id);
+              return { ...room, lastMessage };
+            });
+            targetSocket.emit('roomList', roomsWithLastMessage);
+          }
+        }
+        successCount++;
+      });
+
+      socket.emit('adminActionSuccess', {
+        message: `已将 ${successCount} 名非管理员用户添加到房间`
+      });
+      console.log(`🌐 Admin ${currentUser.username} made room ${roomId} visible to all (${successCount} users)`);
+
+    } else {
+      // Remove all non-admin users from the room
+      nonAdminUsers.forEach(user => {
+        roomDb.removeMember.run(roomId, user.id);
+
+        // If user is online, send them the room update
+        const targetSocketId = onlineUsers.get(user.id);
+        if (targetSocketId) {
+          const targetSocket = io.sockets.sockets.get(targetSocketId);
+          if (targetSocket) {
+            const rooms = roomDb.getUserRooms.all(user.id);
+            const roomsWithLastMessage = rooms.map(room => {
+              const lastMessage = messageDb.getLastMessage.get(room.id);
+              return { ...room, lastMessage };
+            });
+            targetSocket.emit('roomList', roomsWithLastMessage);
+          }
+        }
+        successCount++;
+      });
+
+      socket.emit('adminActionSuccess', {
+        message: `已将 ${successCount} 名非管理员用户从房间移除`
+      });
+      console.log(`🌐 Admin ${currentUser.username} made room ${roomId} invisible to all (${successCount} users)`);
+    }
+
+    // Reload admin panel data
+    setTimeout(() => {
+      socket.emit('reloadSpecialRooms');
+    }, 500);
   });
 
   // Disconnect
