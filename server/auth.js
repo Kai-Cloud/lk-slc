@@ -90,14 +90,17 @@ function verifyToken(token) {
   try {
     // Check session in database
     const session = sessionDb.findByToken.get(token);
+    console.log('🔍 Auth - Session from DB:', session);
+
     if (!session) {
+      console.log('❌ Auth - No session found');
       return null;
     }
 
     // Verify JWT
     const decoded = jwt.verify(token, JWT_SECRET);
 
-    return {
+    const userObj = {
       id: session.user_id,
       username: session.username,
       displayName: session.display_name,
@@ -105,7 +108,14 @@ function verifyToken(token) {
       isAdmin: session.is_admin === 1
     };
 
+    console.log('🔍 Auth - Returning user object:', userObj);
+    console.log('🔍 Auth - isAdmin value:', userObj.isAdmin);
+    console.log('🔍 Auth - session.is_admin from DB:', session.is_admin);
+
+    return userObj;
+
   } catch (error) {
+    console.log('❌ Auth - Error verifying token:', error.message);
     return null;
   }
 }

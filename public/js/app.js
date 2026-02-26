@@ -179,14 +179,21 @@ function connectSocket() {
 
   socket.on('loginSuccess', (data) => {
     console.log('✅ Login successful:', data.user);
+    console.log('🔍 Chat page - isAdmin value:', data.user.isAdmin);
+    console.log('🔍 Chat page - isAdmin type:', typeof data.user.isAdmin);
+
     currentUser = data.user;
 
     // Update localStorage with latest user data (includes updated isAdmin status)
     localStorage.setItem('chatUser', JSON.stringify(data.user));
+    console.log('💾 Updated localStorage with user data');
 
     // Show admin button if user is admin
     if (currentUser.isAdmin) {
       adminBtn.style.display = 'block';
+      console.log('👑 Admin button shown');
+    } else {
+      console.log('👤 User is not admin, button hidden');
     }
   });
 

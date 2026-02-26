@@ -261,19 +261,31 @@
     const token = localStorage.getItem('chatToken');
     const userStr = localStorage.getItem('chatUser');
 
+    console.log('🔍 Admin page - Token exists:', !!token);
+    console.log('🔍 Admin page - User string:', userStr);
+
     if (!token || !userStr) {
+      console.log('❌ No token or user, redirecting to login');
       window.location.href = '/index.html';
     }
 
     try {
       currentUser = JSON.parse(userStr);
+      console.log('🔍 Admin page - Parsed user:', currentUser);
+      console.log('🔍 Admin page - isAdmin value:', currentUser.isAdmin);
+      console.log('🔍 Admin page - isAdmin type:', typeof currentUser.isAdmin);
+
       if (!currentUser.isAdmin) {
+        console.log('❌ User is not admin, redirecting to chat');
         showError('你没有管理员权限');
         setTimeout(() => {
           window.location.href = '/chat.html';
         }, 2000);
+      } else {
+        console.log('✅ User is admin, proceeding...');
       }
     } catch (e) {
+      console.log('❌ Error parsing user:', e);
       window.location.href = '/index.html';
     }
 

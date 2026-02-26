@@ -108,6 +108,7 @@ io.on('connection', (socket) => {
     }
 
     const user = verifyToken(token);
+    console.log('🔍 Server - verifyToken result:', user);
 
     if (!user) {
       socket.emit('loginError', { message: 'Token expired, please login again' });
@@ -116,6 +117,8 @@ io.on('connection', (socket) => {
 
     currentUser = user;
     socket.userId = user.id;
+    console.log('🔍 Server - currentUser set:', currentUser);
+    console.log('🔍 Server - isAdmin value:', currentUser.isAdmin);
 
     // Record online status
     onlineUsers.set(user.id, socket.id);
@@ -139,6 +142,7 @@ io.on('connection', (socket) => {
     });
 
     // Send login success
+    console.log('🔍 Server - Sending loginSuccess with user:', user);
     socket.emit('loginSuccess', { user });
 
     // Load unread counts
