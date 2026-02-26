@@ -182,7 +182,10 @@ async function main() {
     rooms.forEach(room => {
       roomsMap.set(room.id, room);
     });
-    console.log(`📁 Loaded ${rooms.length} rooms`);
+    console.log(`📁 Loaded ${rooms.length} rooms:`);
+    rooms.forEach(room => {
+      console.log(`   - ${room.id} (${room.type}): ${room.name}`);
+    });
   });
 
   socket.on('newRoom', (room) => {
@@ -217,6 +220,13 @@ async function main() {
 
     // Get room info
     const room = roomsMap.get(message.room_id);
+
+    // Debug: Log room info
+    if (!room) {
+      console.log(`⚠️  Warning: Room ${message.room_id} not found in roomsMap`);
+      console.log(`📊 Current roomsMap has ${roomsMap.size} rooms:`, Array.from(roomsMap.keys()));
+    }
+
     const isPrivateChat = room && room.type === 'private';
 
     // Check if bot is mentioned
