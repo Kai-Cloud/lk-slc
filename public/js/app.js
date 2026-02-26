@@ -181,6 +181,9 @@ function connectSocket() {
     console.log('✅ Login successful:', data.user);
     currentUser = data.user;
 
+    // Update localStorage with latest user data (includes updated isAdmin status)
+    localStorage.setItem('chatUser', JSON.stringify(data.user));
+
     // Show admin button if user is admin
     if (currentUser.isAdmin) {
       adminBtn.style.display = 'block';
