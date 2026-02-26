@@ -54,6 +54,9 @@ async function authenticateUser(username, password, isBot = false) {
       // Auto-join lobby
       roomDb.addMember.run('lobby', user.id);
 
+      // Auto-join game-lobby (default visible to all users)
+      roomDb.addMember.run('game-lobby', user.id);
+
       console.log(`✅ New user registered: ${username} (ID: ${user.id})`);
     }
 

@@ -152,6 +152,16 @@ function initDatabase() {
     console.log('✅ Game Lobby room created');
   }
 
+  // Ensure all existing users are members of game-lobby (default visible to all)
+  const allUsers = db.prepare('SELECT id FROM users').all();
+  const addMemberStmt = db.prepare('INSERT OR IGNORE INTO room_members (room_id, user_id) VALUES (?, ?)');
+  allUsers.forEach(user => {
+    addMemberStmt.run('game-lobby', user.id);
+  });
+  if (allUsers.length > 0) {
+    console.log(`✅ Game Lobby made visible to all ${allUsers.length} users`);
+  }
+
   // Database migration: Add pinned column to room_members table (if not exists)
   try {
     const tableInfo = db.prepare("PRAGMA table_info(room_members)").all();
