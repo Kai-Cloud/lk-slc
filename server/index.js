@@ -927,6 +927,53 @@ app.get('/api/messages/:roomId', (req, res) => {
   res.json(messages.reverse());
 });
 
+// Get unread message counts (for SLC Pager app)
+app.get('/api/unread', (req, res) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader ? authHeader.replace('Bearer ', '') : '';
+  const user = verifyToken(token);
+
+  if (!user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const totalRow = unreadDb.getTotalUnreadCount.get(user.id);
+  const total = totalRow?.total || 0;
+
+  const unreadRooms = unreadDb.getUserUnreadCounts.all(user.id);
+
+  const rooms = unreadRooms.map(ur => {
+    const room = roomDb.findById.get(ur.room_id);
+    const lastMsg = ur.last_message_id
+      ? messageDb.getById.get(ur.last_message_id)
+      : null;
+
+    // Private rooms: use peer's display name; group rooms: use room name
+    let roomName = room?.name || 'Unknown';
+    if (room?.type === 'private') {
+      const members = roomDb.getRoomMembers.all(ur.room_id);
+      const peer = members.find(m => m.user_id !== user.id);
+      if (peer) {
+        const peerUser = userDb.findById.get(peer.user_id);
+        roomName = peerUser?.display_name || peerUser?.username || 'Unknown';
+      }
+    }
+
+    return {
+      room_id: ur.room_id,
+      room_name: roomName,
+      count: ur.count,
+      last_message: lastMsg ? {
+        text: lastMsg.text,
+        username: lastMsg.display_name || lastMsg.username || 'Unknown',
+        created_at: lastMsg.created_at
+      } : null
+    };
+  });
+
+  res.json({ total, rooms });
+});
+
 // Start server
 const PORT = process.env.PORT || 3030;
 const HOST = process.env.HOST || '0.0.0.0';

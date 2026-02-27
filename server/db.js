@@ -451,6 +451,14 @@ const messageDb = {
     WHERE m.room_id = ?
     ORDER BY m.created_at DESC
     LIMIT 1
+  `),
+
+  // Get message by ID (for /api/unread preview)
+  getById: db.prepare(`
+    SELECT m.*, u.username, u.display_name
+    FROM messages m
+    JOIN users u ON m.user_id = u.id
+    WHERE m.id = ?
   `)
 };
 
