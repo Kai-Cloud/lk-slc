@@ -268,7 +268,9 @@ function connectSocket() {
 
   socket.on('userOffline', (user) => {
     console.log('👤 User offline:', user.username);
-    socket.emit('getOnlineUsers');
+    // Immediately remove from local list for instant UI feedback
+    onlineUsers = onlineUsers.filter(u => u.id !== user.id);
+    renderUserList();
   });
 
   socket.on('onlineUsers', (users) => {
