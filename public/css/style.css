@@ -165,17 +165,26 @@ body {
 }
 
 /* 大厅特殊样式 */
+.room-item.lobby-room {
+  background: linear-gradient(135deg, #e0e7ff 0%, #ede9fe 100%);
+  border-radius: 8px;
+  margin-bottom: 4px;
+  border-left: 3px solid transparent;
+}
+
 .room-item.lobby-room .room-item-title {
-  color: #667eea;
+  color: #5b4fc4;
   font-weight: 600;
 }
 
 .room-item.lobby-room:hover {
-  background: #f0f4ff;
+  background: linear-gradient(135deg, #d0d6f7 0%, #ddd6fe 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
 }
 
 .room-item.lobby-room.active {
-  background: #e3f2fd;
+  background: linear-gradient(135deg, #c7d2fe 0%, #d4c8f8 100%);
   border-left-color: #667eea;
 }
 

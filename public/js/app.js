@@ -467,7 +467,7 @@ function renderUserList() {
     .filter(u => u.id !== currentUser.id)
     .map(user => `
       <div class="user-item" data-user-id="${user.id}">
-        <div class="user-item-avatar">${user.is_bot ? '🤖' : '👤'}</div>
+        <div class="user-item-avatar">${getUserAvatar(user)}</div>
         <div class="user-item-name">${escapeHtml(user.display_name || user.username)}</div>
         <div class="user-item-status ${isUserOnline(user) ? 'online' : 'offline'}"></div>
       </div>
@@ -612,6 +612,8 @@ function sendMessage() {
 function appendMessage(message) {
   const isOwn = message.user_id === currentUser.id;
   const isBot = message.is_bot === 1;
+  const msgUser = onlineUsers.find(u => u.id === message.user_id);
+  const avatarEmoji = msgUser ? getUserAvatar(msgUser) : (isBot ? '🤖' : '👤');
 
   const messageDiv = document.createElement('div');
   messageDiv.className = `message ${isOwn ? 'own' : ''} ${isBot ? 'bot' : ''}`;
@@ -620,7 +622,7 @@ function appendMessage(message) {
   const processedText = highlightMentions(escapeHtml(message.text));
 
   messageDiv.innerHTML = `
-    <div class="message-avatar">${isBot ? '🤖' : '👤'}</div>
+    <div class="message-avatar">${avatarEmoji}</div>
     <div class="message-content">
       ${!isOwn ? `
         <div class="message-header">
@@ -738,6 +740,12 @@ function updateConnectionStatus(status) {
       connectionStatus.classList.remove('show');
     }, 3000);
   }
+}
+
+// Get avatar emoji for a user
+function getUserAvatar(user) {
+  if (user.avatar) return user.avatar;
+  return user.is_bot ? '🤖' : '👤';
 }
 
 // Check if user is online
@@ -885,7 +893,7 @@ function showMentionSuggestions() {
   // 渲染用户列表
   mentionDropdown.innerHTML = suggestions.map((user, index) => `
     <div class="mention-item" data-index="${index}" data-username="${escapeHtml(user.username)}">
-      <span class="mention-avatar">${user.is_bot ? '🤖' : '👤'}</span>
+      <span class="mention-avatar">${getUserAvatar(user)}</span>
       <span class="mention-name">${escapeHtml(user.display_name || user.username)}</span>
       <span class="mention-username">@${escapeHtml(user.username)}</span>
     </div>

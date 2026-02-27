@@ -295,7 +295,7 @@ const userDb = {
 
   // Get online users (active within last 5 minutes)
   getOnline: db.prepare(`
-    SELECT id, username, display_name, is_bot, is_admin, last_seen, content_url, room_theme
+    SELECT id, username, display_name, is_bot, is_admin, last_seen, content_url, room_theme, avatar
     FROM users
     WHERE datetime(last_seen) > datetime('now', '-5 minutes')
   `),
@@ -323,8 +323,8 @@ const userDb = {
   // Update display name
   updateDisplayName: db.prepare('UPDATE users SET display_name = ? WHERE id = ?'),
 
-  // Update bot metadata (content_url, room_theme)
-  updateBotMetadata: db.prepare('UPDATE users SET content_url = ?, room_theme = ? WHERE id = ? AND is_bot = 1'),
+  // Update bot metadata (content_url, room_theme, avatar)
+  updateBotMetadata: db.prepare('UPDATE users SET content_url = ?, room_theme = ?, avatar = ? WHERE id = ? AND is_bot = 1'),
 
   // Server settings operations
   getSetting: db.prepare('SELECT value FROM server_settings WHERE key = ?'),
@@ -367,7 +367,7 @@ const roomDb = {
 
   // Get room members
   getMembers: db.prepare(`
-    SELECT u.id, u.username, u.display_name, u.is_bot, u.last_seen, u.content_url, u.room_theme
+    SELECT u.id, u.username, u.display_name, u.is_bot, u.last_seen, u.content_url, u.room_theme, u.avatar
     FROM users u
     JOIN room_members rm ON u.id = rm.user_id
     WHERE rm.room_id = ?

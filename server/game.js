@@ -141,7 +141,7 @@ function registerBotEvents(socket, io, getCurrentUser) {
     }
   });
 
-  // Bot: Set metadata (content_url, room_theme)
+  // Bot: Set metadata (content_url, room_theme, avatar)
   socket.on('botSetMetadata', (data) => {
     const currentUser = getCurrentUser();
     if (!currentUser || !currentUser.isBot) {
@@ -149,9 +149,9 @@ function registerBotEvents(socket, io, getCurrentUser) {
     }
 
     try {
-      const { content_url, room_theme } = data;
-      userDb.updateBotMetadata.run(content_url || null, room_theme || null, currentUser.id);
-      console.log(`🤖 Bot ${currentUser.username} set metadata: content_url=${content_url}, room_theme=${room_theme}`);
+      const { content_url, room_theme, avatar } = data;
+      userDb.updateBotMetadata.run(content_url || null, room_theme || null, avatar || null, currentUser.id);
+      console.log(`🤖 Bot ${currentUser.username} set metadata: content_url=${content_url}, room_theme=${room_theme}, avatar=${avatar}`);
 
       io.emit('roomListChanged');
     } catch (error) {
