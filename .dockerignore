@@ -1,0 +1,9 @@
+node_modules/
+data/
+cheatsheet/
+.env
+bots/**/.env
+*.db
+*.log
+.git/
+.DS_Store

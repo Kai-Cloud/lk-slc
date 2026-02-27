@@ -1,0 +1,23 @@
+services:
+  # 聊天服务器
+  chat-server:
+    build: .
+    container_name: slc-server
+    ports:
+      - "3030:3030"
+    volumes:
+      - ./data:/app/data          # SQLite 数据库持久化
+    env_file:
+      - .env
+    restart: unless-stopped
+
+  # GPT Bot（可选，取消注释即可启用）
+  # gpt-bot:
+  #   build: .
+  #   container_name: slc-gpt-bot
+  #   command: ["node", "bots/gpt-bot/index.js"]
+  #   env_file:
+  #     - bots/gpt-bot/.env
+  #   depends_on:
+  #     - chat-server
+  #   restart: unless-stopped
