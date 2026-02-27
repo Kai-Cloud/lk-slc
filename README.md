@@ -56,7 +56,6 @@ simple-lan-chat/
 │       └── i18n.js     # 多语言
 ├── bots/
 │   └── gpt-bot/        # GPT Chat Bot（独立进程）
-├── cheatsheet/         # 架构文档（供开发者 / AI agent 参考）
 ├── data/               # SQLite 数据库文件（运行时生成）
 ├── .env.example        # 服务器环境变量模板
 └── package.json
