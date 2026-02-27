@@ -743,7 +743,10 @@ function updateConnectionStatus(status) {
 // Check if user is online
 function isUserOnline(user) {
   if (!user.last_seen) return false;
-  const lastSeen = new Date(user.last_seen);
+  // SQLite CURRENT_TIMESTAMP stores UTC but without 'Z' suffix;
+  // append 'Z' so the browser parses it as UTC instead of local time.
+  const raw = user.last_seen;
+  const lastSeen = new Date(raw.endsWith('Z') ? raw : raw + 'Z');
   const now = new Date();
   return (now - lastSeen) < 5 * 60 * 1000; // Active within 5 minutes
 }
