@@ -5,8 +5,9 @@ const path = require('path');
 const { execSync } = require('child_process');
 require('dotenv').config();
 
-const { db, initDatabase, userDb, roomDb, messageDb, unreadDb, gameDb, getOrCreatePrivateRoom } = require('./db');
+const { db, initDatabase, userDb, roomDb, messageDb, unreadDb, getOrCreatePrivateRoom } = require('./db');
 const { authenticateUser, verifyToken, changePassword } = require('./auth');
+const { setupGameRoutes, registerGameEvents, registerBotEvents, handleBotDisconnect, deleteUserGameData } = require('./game');
 
 // Initialize database
 initDatabase();
@@ -25,28 +26,8 @@ const io = new Server(httpServer, {
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
-// Serve lk-sgl game files as external plugin
-// Maps /games/* -> ../lk-sgl/*
-const fs = require('fs');
-const LK_SGL_PATH = path.join(__dirname, '..', '..', 'lk-sgl');
-
-if (!fs.existsSync(LK_SGL_PATH)) {
-  console.warn('\n⚠️  WARNING: lk-sgl project not found!');
-  console.warn('   Expected location:', LK_SGL_PATH);
-  console.warn('   Games will not be available.');
-  console.warn('   Please ensure lk-sgl is in the same parent directory as simple-lan-chat.\n');
-} else {
-  console.log('✅ lk-sgl project found at:', LK_SGL_PATH);
-
-  // Serve games under /games path
-  app.use('/games', express.static(LK_SGL_PATH, {
-    setHeaders: (res) => {
-      res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-    }
-  }));
-
-  console.log('🎮 Games available at: /games/*\n');
-}
+// Serve lk-sgl game files
+setupGameRoutes(app);
 
 // Get version info from git
 app.get('/api/version', (req, res) => {
@@ -69,6 +50,11 @@ io.on('connection', (socket) => {
   console.log(`📱 New connection: ${socket.id}`);
 
   let currentUser = null;
+  const getCurrentUser = () => currentUser;
+
+  // Register game & bot socket events (defined in game.js)
+  registerGameEvents(socket, getCurrentUser);
+  registerBotEvents(socket, io, getCurrentUser);
 
   // Login event
   socket.on('login', async (data) => {
@@ -598,74 +584,6 @@ io.on('connection', (socket) => {
     socket.emit('roomList', roomsWithLastMessage);
   });
 
-  // Game progress: Load game progress for current user
-  socket.on('getGameProgress', (data) => {
-    if (!currentUser) {
-      socket.emit('error', { message: 'Please login first' });
-      return;
-    }
-
-    const { gameName } = data;
-    const progressRecords = gameDb.getProgress.all(currentUser.id, gameName);
-
-    const starsMap = {};
-    progressRecords.forEach(p => {
-      starsMap[p.level] = p.stars;
-    });
-
-    const unlockData = gameDb.getUnlocked.get(currentUser.id, gameName);
-    const highestUnlocked = unlockData?.highest_unlocked || 1;
-
-    socket.emit('gameProgress', {
-      gameName,
-      stars: starsMap,
-      unlocked: highestUnlocked
-    });
-
-    console.log(`📊 User ${currentUser.username} loaded progress for ${gameName}`);
-  });
-
-  // Game progress: Save level completion
-  socket.on('saveGameProgress', (data) => {
-    if (!currentUser) return;
-
-    const { gameName, level, stars, moves, timeSeconds } = data;
-    if (!gameName || !level || stars === undefined) return;
-
-    gameDb.saveProgress.run(
-      currentUser.id,
-      gameName,
-      level,
-      stars,
-      moves || null,
-      timeSeconds || null
-    );
-
-    const currentUnlock = gameDb.getUnlocked.get(currentUser.id, gameName);
-    const currentMax = currentUnlock?.highest_unlocked || 1;
-    if (level >= currentMax && stars > 0) {
-      gameDb.updateUnlocked.run(currentUser.id, gameName, level + 1);
-    }
-
-    socket.emit('gameProgressSaved', {
-      gameName,
-      level,
-      stars,
-      unlocked: Math.max(currentMax, level + 1)
-    });
-
-    console.log(`🎮 ${currentUser.username} completed ${gameName} L${level} ⭐${stars}`);
-  });
-
-  // Game leaderboard: Get leaderboard for a specific game and level
-  socket.on('getGameLeaderboard', (data) => {
-    const { gameName, level } = data;
-    if (!gameName || !level) return;
-
-    const leaderboard = gameDb.getLeaderboard.all(gameName, level);
-    socket.emit('gameLeaderboard', { gameName, level, leaderboard });
-  });
-
   // Admin: Get all users
   socket.on('adminGetAllUsers', () => {
     if (!currentUser || !currentUser.isAdmin) {
@@ -830,13 +748,10 @@ io.on('connection', (socket) => {
       // 5. Delete unread counts (already has CASCADE)
       db.prepare('DELETE FROM unread_counts WHERE user_id = ?').run(userId);
 
-      // 6. Delete game progress (already has CASCADE)
-      db.prepare('DELETE FROM game_progress WHERE user_id = ?').run(userId);
+      // 6. Delete game data
+      deleteUserGameData(userId);
 
-      // 7. Delete game unlocks (already has CASCADE)
-      db.prepare('DELETE FROM game_unlocks WHERE user_id = ?').run(userId);
-
-      // 8. Finally delete the user
+      // 7. Finally delete the user
       userDb.deleteUser.run(userId);
 
       socket.emit('adminActionSuccess', {
@@ -907,159 +822,12 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Bot: Update display name
-  socket.on('updateDisplayName', (data) => {
-    if (!currentUser) {
-      socket.emit('error', { message: 'Not authenticated' });
-      return;
-    }
-
-    const { displayName } = data;
-
-    // Validate display name (same rules as username)
-    const displayNameRegex = /^[\w\-\u4E00-\u9FFF]{1,20}$/;
-    if (!displayNameRegex.test(displayName)) {
-      socket.emit('error', { message: 'Invalid display name format' });
-      return;
-    }
-
-    try {
-      userDb.updateDisplayName.run(displayName, currentUser.id);
-      currentUser.displayName = displayName;
-
-      socket.emit('displayNameUpdated', { displayName });
-      console.log(`✏️  User ${currentUser.username} changed display name to: ${displayName}`);
-    } catch (error) {
-      console.error('❌ Failed to update display name:', error);
-      socket.emit('error', { message: 'Failed to update display name' });
-    }
-  });
-
-  // Bot: Set metadata (content_url, room_theme)
-  socket.on('botSetMetadata', (data) => {
-    if (!currentUser || !currentUser.isBot) {
-      return;
-    }
-
-    try {
-      const { content_url, room_theme } = data;
-      userDb.updateBotMetadata.run(content_url || null, room_theme || null, currentUser.id);
-      console.log(`🤖 Bot ${currentUser.username} set metadata: content_url=${content_url}, room_theme=${room_theme}`);
-
-      // Notify all online users to refresh room list (so members get updated metadata)
-      io.emit('roomListChanged');
-    } catch (error) {
-      console.error('❌ Failed to set bot metadata:', error);
-      socket.emit('error', { message: 'Failed to set bot metadata' });
-    }
-  });
-
-  // Bot: Restore room visibility on startup
-  // Only restore rooms that were auto-hidden by bot disconnect (is_active = -1)
-  // Leave admin-hidden rooms (is_active = 0) untouched
-  socket.on('botRestoreRooms', () => {
-    if (!currentUser || !currentUser.isBot) {
-      return;
-    }
-
-    try {
-      const myRooms = roomDb.getRoomsByBotUser.all(currentUser.id);
-
-      let restoredCount = 0;
-      myRooms.forEach(room => {
-        if (room.is_active === -1) {
-          roomDb.setRoomActive.run(1, room.id);
-          restoredCount++;
-        }
-      });
-
-      console.log(`🎮 Bot ${currentUser.username} restored ${restoredCount}/${myRooms.length} rooms`);
-
-      // Notify all online users to refresh room list
-      io.emit('roomListChanged');
-
-    } catch (error) {
-      console.error('❌ Failed to restore bot rooms:', error);
-    }
-  });
-
-  // Bot: Ensure private rooms exist with all non-bot users
-  socket.on('botEnsureRoomsForAllUsers', () => {
-    if (!currentUser || !currentUser.isBot) {
-      return;
-    }
-
-    try {
-      const allUsers = userDb.getAll.all();
-      const nonBotUsers = allUsers.filter(u => u.is_bot === 0);
-      let created = 0;
-
-      nonBotUsers.forEach(user => {
-        const room = getOrCreatePrivateRoom(currentUser.id, user.id);
-        // Only set new rooms to active; don't override admin-hidden rooms (is_active=0)
-        if (room.is_active === null || room.is_active === undefined) {
-          roomDb.setRoomActive.run(1, room.id);
-        }
-        created++;
-      });
-
-      console.log(`🎮 Bot ${currentUser.username} ensured private rooms for ${created} users`);
-
-      // Notify all online users to refresh room list
-      io.emit('roomListChanged');
-
-    } catch (error) {
-      console.error('❌ Failed to ensure bot rooms:', error);
-    }
-  });
-
-  // Bot: Hide rooms on shutdown (only auto-hide active rooms, preserve admin-hidden)
-  socket.on('botHideRooms', () => {
-    if (!currentUser || !currentUser.isBot) {
-      return;
-    }
-
-    try {
-      const myRooms = roomDb.getRoomsByBotUser.all(currentUser.id);
-      let hiddenCount = 0;
-
-      myRooms.forEach(room => {
-        if (room.is_active === 1 || room.is_active === null) {
-          roomDb.setRoomActive.run(-1, room.id);
-          hiddenCount++;
-        }
-      });
-
-      console.log(`🎮 Bot ${currentUser.username} hid ${hiddenCount}/${myRooms.length} rooms`);
-
-      // Notify all online users to refresh room list
-      io.emit('roomListChanged');
-
-    } catch (error) {
-      console.error('❌ Failed to hide bot rooms:', error);
-    }
-  });
-
   // Disconnect
   socket.on('disconnect', () => {
     if (currentUser) {
-      // If this is a bot, auto-hide its active rooms (is_active=1 -> -1)
-      // Leave admin-hidden rooms (is_active=0) untouched
+      // If this is a bot, auto-hide its active rooms
       if (currentUser.isBot) {
-        try {
-          const myRooms = roomDb.getRoomsByBotUser.all(currentUser.id);
-          let hiddenCount = 0;
-          myRooms.forEach(room => {
-            if (room.is_active === 1 || room.is_active === null) {
-              roomDb.setRoomActive.run(-1, room.id);
-              hiddenCount++;
-            }
-          });
-          console.log(`🎮 Bot ${currentUser.username} disconnected, auto-hid ${hiddenCount}/${myRooms.length} rooms`);
-          io.emit('roomListChanged');
-        } catch (error) {
-          console.error('❌ Failed to hide bot rooms on disconnect:', error);
-        }
+        handleBotDisconnect(currentUser, io);
       }
 
       onlineUsers.delete(currentUser.id);
