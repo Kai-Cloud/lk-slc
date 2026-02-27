@@ -238,17 +238,6 @@
       </div>
     </div>
 
-    <!-- Special Rooms Management Section -->
-    <div class="section">
-      <h2>🎮 特殊房间管理 (游戏大厅)</h2>
-      <p style="color: #666; font-size: 14px; margin-bottom: 20px;">
-        管理哪些用户可以看到"游戏大厅"等特殊房间
-      </p>
-      <div id="specialRoomsList">
-        <div class="loading">加载中...</div>
-      </div>
-    </div>
-
     <!-- Server Settings Section -->
     <div class="section">
       <h2>⚙️ 服务器设置</h2>
@@ -326,7 +315,6 @@
       console.log('🔍 Admin - loginSuccess isAdmin:', data.user.isAdmin);
       // Now load admin data after authentication succeeds
       loadUsers();
-      loadSpecialRooms();
       loadServerSettings();
     });
 
@@ -425,97 +413,6 @@
       container.innerHTML = html;
     });
 
-    // Load special rooms visibility
-    function loadSpecialRooms() {
-      socket.emit('adminGetSpecialRooms');
-    }
-
-    socket.on('adminSpecialRoomsList', (data) => {
-      const { rooms, allUsers } = data;
-      const container = document.getElementById('specialRoomsList');
-
-      if (rooms.length === 0) {
-        container.innerHTML = '<div class="empty-state">暂无特殊房间</div>';
-        return;
-      }
-
-      let html = '';
-      rooms.forEach(room => {
-        const members = room.members || [];
-        const memberIds = new Set(members.map(m => m.id));
-
-        // Filter out admins - they always have access and shouldn't be in the list
-        const nonAdminUsers = allUsers.filter(u => !u.is_admin);
-
-        // Count non-admin members
-        const nonAdminMembers = members.filter(m => !m.is_admin);
-        const allVisible = nonAdminMembers.length === nonAdminUsers.length && nonAdminUsers.length > 0;
-
-        html += `
-          <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-              <h3 style="margin: 0;">${room.name} (${room.id})</h3>
-              <div style="display: flex; gap: 10px; align-items: center;">
-                <span style="color: #666; font-size: 14px;">
-                  ${allVisible ? '✅ 全体可见' : '⚠️ 部分可见'}
-                </span>
-                <button class="btn ${allVisible ? 'btn-danger' : 'btn-primary'} btn-small room-visibility-action"
-                        data-action="toggleRoomVisibility" data-room-id="${escapeHtml(room.id)}" data-make-visible="${!allVisible}">
-                  ${allVisible ? '设为全体不可见' : '设为全体可见'}
-                </button>
-              </div>
-            </div>
-            <p style="color: #888; font-size: 12px; margin-bottom: 15px;">
-              💡 管理员始终可见所有房间，不受此控制影响
-            </p>
-            <table>
-              <thead>
-                <tr>
-                  <th>用户</th>
-                  <th>可见性</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-        `;
-
-        nonAdminUsers.forEach(user => {
-          const hasAccess = memberIds.has(user.id);
-          html += `
-            <tr>
-              <td>
-                ${user.username}
-                ${user.is_bot ? '<span class="badge badge-bot">Bot</span>' : ''}
-              </td>
-              <td>
-                <span class="badge ${hasAccess ? 'badge-online' : 'badge-offline'}">
-                  ${hasAccess ? '可见' : '不可见'}
-                </span>
-              </td>
-              <td>
-                ${hasAccess ?
-                  `<button class="btn btn-danger btn-small room-action" data-action="removeFromRoom" data-room-id="${escapeHtml(room.id)}" data-user-id="${user.id}" data-username="${escapeHtml(user.username)}">
-                    移除
-                  </button>` :
-                  `<button class="btn btn-primary btn-small room-action" data-action="addToRoom" data-room-id="${escapeHtml(room.id)}" data-user-id="${user.id}" data-username="${escapeHtml(user.username)}">
-                    添加
-                  </button>`
-                }
-              </td>
-            </tr>
-          `;
-        });
-
-        html += `
-              </tbody>
-            </table>
-          </div>
-        `;
-      });
-
-      container.innerHTML = html;
-    });
-
     // Admin actions
     function promoteToAdmin(userId, username) {
       if (confirm(`确定要将 ${username} 设置为管理员吗？`)) {
@@ -560,25 +457,6 @@
       }
     }
 
-    function addToRoom(roomId, userId, username) {
-      socket.emit('adminAddUserToRoom', { roomId, userId });
-      showSuccess(`已将 ${username} 添加到房间`);
-    }
-
-    function removeFromRoom(roomId, userId, username) {
-      if (confirm(`确定要将 ${username} 从此房间移除吗？`)) {
-        socket.emit('adminRemoveUserFromRoom', { roomId, userId });
-        showSuccess(`已将 ${username} 从房间移除`);
-      }
-    }
-
-    function toggleRoomVisibility(roomId, makeVisible) {
-      const action = makeVisible ? '全体可见' : '全体不可见';
-      if (confirm(`确定要将此房间设为${action}吗？`)) {
-        socket.emit('adminToggleRoomVisibility', { roomId, makeVisible });
-      }
-    }
-
     // Load server settings
     function loadServerSettings() {
       socket.emit('adminGetServerSettings');
@@ -608,11 +486,6 @@
     socket.on('adminActionSuccess', (data) => {
       showSuccess(data.message);
       loadUsers();
-      loadSpecialRooms();
-    });
-
-    socket.on('reloadSpecialRooms', () => {
-      loadSpecialRooms();
     });
 
     // Event delegation for admin actions (XSS security fix)
@@ -643,32 +516,6 @@
             deleteUser(userId, username);
             break;
         }
-      }
-
-      // Handle room actions
-      const roomTarget = e.target.closest('.room-action');
-      if (roomTarget) {
-        const action = roomTarget.dataset.action;
-        const roomId = roomTarget.dataset.roomId;
-        const userId = parseInt(roomTarget.dataset.userId);
-        const username = roomTarget.dataset.username;
-
-        switch (action) {
-          case 'addToRoom':
-            addToRoom(roomId, userId, username);
-            break;
-          case 'removeFromRoom':
-            removeFromRoom(roomId, userId, username);
-            break;
-        }
-      }
-
-      // Handle room visibility actions
-      const visibilityTarget = e.target.closest('.room-visibility-action');
-      if (visibilityTarget) {
-        const roomId = visibilityTarget.dataset.roomId;
-        const makeVisible = visibilityTarget.dataset.makeVisible === 'true';
-        toggleRoomVisibility(roomId, makeVisible);
       }
     });
 

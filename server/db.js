@@ -236,6 +236,27 @@ function initDatabase() {
     console.error('⚠️  Database migration warning:', error.message);
   }
 
+  // Database migration: Add content_url and room_theme columns to users table (for content bot metadata)
+  try {
+    const usersTableInfo = db.prepare("PRAGMA table_info(users)").all();
+    const hasContentUrl = usersTableInfo.some(col => col.name === 'content_url');
+    const hasRoomTheme = usersTableInfo.some(col => col.name === 'room_theme');
+
+    if (!hasContentUrl) {
+      console.log('🔄 Database migration: Adding content_url column to users table...');
+      db.exec('ALTER TABLE users ADD COLUMN content_url TEXT');
+      console.log('✅ Migration complete');
+    }
+
+    if (!hasRoomTheme) {
+      console.log('🔄 Database migration: Adding room_theme column to users table...');
+      db.exec('ALTER TABLE users ADD COLUMN room_theme TEXT');
+      console.log('✅ Migration complete');
+    }
+  } catch (error) {
+    console.error('⚠️  Database migration warning:', error.message);
+  }
+
   // Initialize server settings with defaults
   try {
     db.prepare('INSERT OR IGNORE INTO server_settings (key, value) VALUES (?, ?)').run('registration_enabled', '1');
@@ -274,7 +295,7 @@ const userDb = {
 
   // Get online users (active within last 5 minutes)
   getOnline: db.prepare(`
-    SELECT id, username, display_name, is_bot, is_admin, last_seen
+    SELECT id, username, display_name, is_bot, is_admin, last_seen, content_url, room_theme
     FROM users
     WHERE datetime(last_seen) > datetime('now', '-5 minutes')
   `),
@@ -301,6 +322,9 @@ const userDb = {
 
   // Update display name
   updateDisplayName: db.prepare('UPDATE users SET display_name = ? WHERE id = ?'),
+
+  // Update bot metadata (content_url, room_theme)
+  updateBotMetadata: db.prepare('UPDATE users SET content_url = ?, room_theme = ? WHERE id = ? AND is_bot = 1'),
 
   // Server settings operations
   getSetting: db.prepare('SELECT value FROM server_settings WHERE key = ?'),
@@ -343,7 +367,7 @@ const roomDb = {
 
   // Get room members
   getMembers: db.prepare(`
-    SELECT u.id, u.username, u.display_name, u.is_bot, u.last_seen
+    SELECT u.id, u.username, u.display_name, u.is_bot, u.last_seen, u.content_url, u.room_theme
     FROM users u
     JOIN room_members rm ON u.id = rm.user_id
     WHERE rm.room_id = ?

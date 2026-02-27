@@ -179,6 +179,64 @@ body {
   border-left-color: #667eea;
 }
 
+/* Bot room theme: game-lobby (purple gradient) */
+.room-item.bot-room-theme-game-lobby {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 8px;
+  margin-bottom: 4px;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+  border-left: 3px solid transparent;
+}
+
+.room-item.bot-room-theme-game-lobby:hover {
+  background: linear-gradient(135deg, #5568d3 0%, #653a8b 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.room-item.bot-room-theme-game-lobby.active {
+  background: linear-gradient(135deg, #5568d3 0%, #653a8b 100%);
+  border-left-color: #fff;
+}
+
+.room-item.bot-room-theme-game-lobby .room-item-title {
+  color: white;
+  font-weight: 600;
+}
+
+.room-item.bot-room-theme-game-lobby .room-item-preview {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Bot room theme: assistant (teal gradient) */
+.room-item.bot-room-theme-assistant {
+  background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+  border-radius: 8px;
+  margin-bottom: 4px;
+  box-shadow: 0 2px 8px rgba(67, 233, 123, 0.3);
+  border-left: 3px solid transparent;
+}
+
+.room-item.bot-room-theme-assistant:hover {
+  background: linear-gradient(135deg, #38d96e 0%, #2de0c0 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(67, 233, 123, 0.4);
+}
+
+.room-item.bot-room-theme-assistant.active {
+  background: linear-gradient(135deg, #38d96e 0%, #2de0c0 100%);
+  border-left-color: #fff;
+}
+
+.room-item.bot-room-theme-assistant .room-item-title {
+  color: white;
+  font-weight: 600;
+}
+
+.room-item.bot-room-theme-assistant .room-item-preview {
+  color: rgba(255, 255, 255, 0.7);
+}
+
 /* 置顶图标 */
 .pin-icon {
   font-size: 12px;
@@ -299,37 +357,6 @@ body {
 
 .user-item-status.offline {
   background: #999;
-}
-
-/* Game Lobby Virtual User */
-.user-item.game-lobby-user {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border-radius: 8px;
-  margin-bottom: 8px;
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
-  border-left: 3px solid transparent;
-}
-
-.user-item.game-lobby-user:hover {
-  background: linear-gradient(135deg, #5568d3 0%, #653a8b 100%);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-}
-
-.user-item.game-lobby-user .user-item-name {
-  color: white;
-  font-weight: 600;
-}
-
-.user-item.game-lobby-user .user-item-avatar {
-  background: rgba(255, 255, 255, 0.2);
-  font-size: 20px;
-}
-
-.user-item.game-lobby-user .user-item-status {
-  background: #4caf50;
-  box-shadow: 0 0 8px rgba(76, 175, 80, 0.6);
 }
 
 /* 主聊天区域 */
@@ -961,11 +988,11 @@ body {
 }
 
 /* ============================================================ */
-/* Game Lobby Styles */
+/* Content Bot Room Styles (Game Lobby, etc.)                  */
 /* ============================================================ */
 
-/* Game Lobby Container */
-.game-lobby-container {
+/* Content Bot Container */
+.content-bot-container {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -975,19 +1002,19 @@ body {
   min-height: 0;
 }
 
-.game-lobby-header {
+.content-bot-header {
   text-align: center;
   margin-bottom: 30px;
   flex-shrink: 0;
 }
 
-.game-lobby-header h2 {
+.content-bot-header h2 {
   font-size: 28px;
   margin-bottom: 8px;
   color: #333;
 }
 
-.game-lobby-header p {
+.content-bot-header p {
   color: #666;
   font-size: 14px;
 }
@@ -1036,8 +1063,8 @@ body {
   margin: 0;
 }
 
-/* Game Player Frame */
-#gamePlayerFrame {
+/* Content Player Frame */
+.content-player-frame {
   flex: 1;
   width: 100%;
   display: flex;
@@ -1064,7 +1091,7 @@ body {
   background: #5568d3;
 }
 
-#gameIframe {
+.content-iframe {
   width: 100%;
   flex: 1;
   border: none;
@@ -1093,7 +1120,7 @@ body {
     font-size: 16px;
   }
 
-  #gamePlayerFrame {
+  .content-player-frame {
     height: calc(100vh - 150px);
   }
 }

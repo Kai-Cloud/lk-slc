@@ -1,7 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const { userDb, sessionDb, roomDb } = require('./db');
+const { userDb, sessionDb, roomDb, db } = require('./db');
 
 // JWT secret (should be read from environment variable in production)
 const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
@@ -69,6 +69,13 @@ async function authenticateUser(username, password, isBot = false) {
       // Update last seen time
       userDb.updateLastSeen.run(user.id);
 
+      // If logging in as bot but is_bot was not set, fix it
+      if (isBot && user.is_bot === 0) {
+        db.prepare('UPDATE users SET is_bot = 1 WHERE id = ?').run(user.id);
+        user = userDb.findById.get(user.id);
+        console.log(`🤖 User ${username} upgraded to bot status`);
+      }
+
     } else {
       // Check if registration is enabled (unless this is a bot)
       if (!isBot) {
@@ -109,11 +116,11 @@ async function authenticateUser(username, password, isBot = false) {
       // Auto-join lobby
       roomDb.addMember.run('lobby', user.id);
 
-      // Auto-create private chat with game-bot (if game-bot exists)
-      const gameBot = userDb.findByUsername.get('game-bot');
-      if (gameBot) {
-        const { getOrCreatePrivateRoom } = require('./db');
-        getOrCreatePrivateRoom(user.id, gameBot.id);
+      // Auto-create private chat with all online bots
+      const { getOrCreatePrivateRoom } = require('./db');
+      const onlineBots = userDb.getOnline.all().filter(u => u.is_bot === 1);
+      for (const bot of onlineBots) {
+        getOrCreatePrivateRoom(user.id, bot.id);
       }
 
       console.log(`✅ New user registered: ${username} (ID: ${user.id})`);

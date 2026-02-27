@@ -382,6 +382,9 @@ function renderRoomList() {
     const hasUnread = unreadCount > 0;
     const isPinned = room.pinned === 1;
     const isLobby = room.id === 'lobby';
+    const botMember = room.type === 'private' && room.members && room.members.find(m => m.is_bot === 1);
+    const isContentBot = !!(botMember && botMember.content_url);
+    const botRoomTheme = botMember && botMember.room_theme ? `bot-room-theme-${botMember.room_theme}` : '';
 
     // 获取房间显示名称
     let displayName = room.name;
@@ -395,9 +398,9 @@ function renderRoomList() {
     // 置顶图标
     const pinIcon = isPinned ? '<span class="pin-icon" title="已置顶">📌</span>' : '';
 
-    // Pin button (lobby doesn't show, as it's always pinned)
+    // Pin button (lobby and content-bot rooms don't show action buttons)
     let actionButtons = '';
-    if (room.id !== 'lobby') {
+    if (room.id !== 'lobby' && !isContentBot) {
       const pinButton = isPinned
         ? `<button class="room-pin-btn" title="${i18n.t('room.unpin')}">📌</button>`
         : `<button class="room-pin-btn unpinned" title="${i18n.t('room.pin')}">📍</button>`;
@@ -405,11 +408,11 @@ function renderRoomList() {
     }
 
     return `
-      <div class="room-item ${isActive ? 'active' : ''} ${hasUnread ? 'has-unread' : ''} ${isLobby ? 'lobby-room' : ''}" data-room-id="${room.id}">
+      <div class="room-item ${isActive ? 'active' : ''} ${hasUnread ? 'has-unread' : ''} ${isLobby ? 'lobby-room' : ''} ${isContentBot ? botRoomTheme : ''}" data-room-id="${room.id}">
         <div class="room-item-content">
           <div class="room-item-title">${pinIcon}${escapeHtml(displayName)}</div>
           <div class="room-item-preview" id="room-preview-${room.id}">
-            ${room.lastMessage ? escapeHtml(room.lastMessage.text.substring(0, 30)) : i18n.t('room.startChat')}
+            ${isContentBot ? (botMember.display_name || botMember.username) : (room.lastMessage ? escapeHtml(room.lastMessage.text.substring(0, 30)) : i18n.t('room.startChat'))}
           </div>
         </div>
         ${hasUnread ? `<div class="unread-badge">${unreadCount > 99 ? '99+' : unreadCount}</div>` : ''}
@@ -486,13 +489,13 @@ function renderUserList() {
 function selectRoom(room) {
   currentRoom = room;
 
-  // Check if this is a private chat with game bot
-  const isGameBotRoom = room && room.type === 'private' &&
-                        room.members && room.members.some(m => m.username === 'game-bot');
+  // Check if this is a private chat with a content bot
+  const contentBot = room && room.type === 'private' &&
+                     room.members && room.members.find(m => m.is_bot === 1 && m.content_url);
 
-  if (isGameBotRoom) {
-    // Show game selection instead of normal chat
-    showGameLobby();
+  if (contentBot) {
+    // Show content bot UI (e.g., game lobby) instead of normal chat
+    showContentBotRoom(contentBot.content_url, contentBot.display_name || contentBot.username);
     // Re-render room list to apply active style
     renderRoomList();
     // Mobile: Auto-hide sidebar after selecting room
@@ -502,22 +505,10 @@ function selectRoom(room) {
     return;
   }
 
-  // Handle old game lobby room (backwards compatibility during migration)
-  if (room.id === 'game-lobby') {
-    showGameLobby();
-    // Re-render room list to apply active style
-    renderRoomList();
-    // Mobile: Auto-hide sidebar after selecting room
-    if (window.innerWidth <= 768) {
-      sidebar.classList.remove('show');
-    }
-    return;
-  }
-
-  // Hide game lobby container if it exists
-  const gameLobbyContainer = document.getElementById('gameLobbyContainer');
-  if (gameLobbyContainer) {
-    gameLobbyContainer.style.display = 'none';
+  // Hide content bot container if it exists
+  const contentBotContainer = document.getElementById('contentBotContainer');
+  if (contentBotContainer) {
+    contentBotContainer.style.display = 'none';
   }
 
   // Show normal chat UI
@@ -1088,136 +1079,138 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ============================================================
-// Game Lobby Integration
+// Content Bot Integration (generic iframe-based bot rooms)
 // ============================================================
 
 // Cache for game progress
 window.__cachedGameProgress = {};
 
-// Show game lobby
-function showGameLobby() {
+// Cache for loaded manifests (content_url -> items array)
+window.__manifestCache = {};
+
+// Show content bot room (loads manifest dynamically)
+function showContentBotRoom(contentUrl, botDisplayName) {
   // Hide normal chat UI elements
   inputArea.style.display = 'none';
   messageList.style.display = 'none';
 
   // Update header
-  currentRoomName.textContent = '🎮 游戏大厅';
+  currentRoomName.textContent = botDisplayName || 'Bot';
   roomSubtitle.textContent = '';
 
-  // Create or get game lobby container (as sibling to messageList, not child)
-  let gameLobbyContainer = document.getElementById('gameLobbyContainer');
-  let isFirstTime = false;
+  // Create or get content bot container (as sibling to messageList, not child)
+  let contentBotContainer = document.getElementById('contentBotContainer');
 
-  if (!gameLobbyContainer) {
-    isFirstTime = true;
-    gameLobbyContainer = document.createElement('div');
-    gameLobbyContainer.id = 'gameLobbyContainer';
-    gameLobbyContainer.className = 'game-lobby-container';
-    messageList.parentElement.appendChild(gameLobbyContainer);
+  if (!contentBotContainer) {
+    contentBotContainer = document.createElement('div');
+    contentBotContainer.id = 'contentBotContainer';
+    contentBotContainer.className = 'content-bot-container';
+    messageList.parentElement.appendChild(contentBotContainer);
   }
 
-  gameLobbyContainer.style.display = 'flex';
+  contentBotContainer.style.display = 'flex';
 
-  // Only inject HTML on first creation to avoid re-creating iframes
-  if (isFirstTime) {
-    gameLobbyContainer.innerHTML = `
-      <div class="game-lobby-header">
-        <h2>🎮 游戏大厅 / Game Lobby</h2>
-        <p>选择一个游戏开始挑战 / Choose a game to start</p>
+  // Load manifest and render content cards
+  loadAndRenderManifest(contentBotContainer, contentUrl, botDisplayName);
+}
+
+// Load manifest from URL and render cards
+async function loadAndRenderManifest(container, contentUrl, botDisplayName) {
+  // If already loaded for this URL, just ensure cards are visible
+  if (window.__manifestCache[contentUrl] && container.dataset.loadedUrl === contentUrl) {
+    // Ensure grid view is shown (not iframe)
+    const header = container.querySelector('.content-bot-header');
+    const grid = container.querySelector('.game-grid');
+    const playerFrame = container.querySelector('.content-player-frame');
+    if (header) header.style.display = 'block';
+    if (grid) grid.style.display = 'grid';
+    if (playerFrame) playerFrame.style.display = 'none';
+    return;
+  }
+
+  try {
+    const response = await fetch(contentUrl);
+    if (!response.ok) throw new Error(`Failed to load manifest: ${response.status}`);
+    const items = await response.json();
+    window.__manifestCache[contentUrl] = items;
+
+    // Compute base path from manifest URL (e.g., /games/games.json -> /games/)
+    const basePath = contentUrl.substring(0, contentUrl.lastIndexOf('/') + 1);
+
+    // Build cards HTML from manifest
+    const cardsHtml = items.map(item => `
+      <div class="game-card" data-game-file="${escapeHtml(item.file)}" data-game-id="${escapeHtml(item.id)}">
+        <div class="game-icon">${item.icon || '🎯'}</div>
+        <h3>${escapeHtml(item.name)}</h3>
+        <p>${escapeHtml(item.description || '')}</p>
       </div>
+    `).join('');
 
+    container.innerHTML = `
+      <div class="content-bot-header">
+        <h2>${escapeHtml(botDisplayName || 'Bot')}</h2>
+      </div>
       <div class="game-grid">
-        <div class="game-card" data-game="sliding-puzzle">
-          <div class="game-icon">🧩</div>
-          <h3>数字华容道</h3>
-          <p>9 关卡 · 滑块解谜</p>
-        </div>
-
-        <div class="game-card" data-game="memory-game">
-          <div class="game-icon">🃏</div>
-          <h3>记忆翻牌</h3>
-          <p>9 关卡 · 配对记忆</p>
-        </div>
-
-        <div class="game-card" data-game="math-challenge">
-          <div class="game-icon">🔢</div>
-          <h3>速算挑战</h3>
-          <p>9 关卡 · 限时计算</p>
-        </div>
-
-        <div class="game-card" data-game="poetry-game">
-          <div class="game-icon">📖</div>
-          <h3>古诗背诵</h3>
-          <p>13 首 · 小学必背</p>
-        </div>
+        ${cardsHtml}
       </div>
-
-      <div id="gamePlayerFrame" style="display:none;">
-        <button class="btn-back-to-lobby">← 返回游戏大厅</button>
-        <iframe id="gameIframe" src="" frameborder="0"></iframe>
+      <div class="content-player-frame" style="display:none;">
+        <button class="btn-back-to-lobby">\u2190 ${escapeHtml(botDisplayName || 'Back')}</button>
+        <iframe class="content-iframe" src="" frameborder="0"></iframe>
       </div>
     `;
 
-    // Attach click handlers (only once)
-    document.querySelectorAll('.game-card').forEach(card => {
+    container.dataset.loadedUrl = contentUrl;
+    container.dataset.basePath = basePath;
+
+    // Attach click handlers
+    container.querySelectorAll('.game-card').forEach(card => {
       card.addEventListener('click', () => {
-        launchGame(card.dataset.game);
+        launchContentItem(container, card.dataset.gameFile);
       });
     });
 
-    // Back button handler (only once)
-    const backBtn = document.querySelector('.btn-back-to-lobby');
+    // Back button handler
+    const backBtn = container.querySelector('.btn-back-to-lobby');
     if (backBtn) {
       backBtn.addEventListener('click', () => {
-        const gameLobbyHeader = document.querySelector('.game-lobby-header');
-        const gameGrid = document.querySelector('.game-grid');
-        const gamePlayerFrame = document.getElementById('gamePlayerFrame');
-
-        if (gamePlayerFrame) gamePlayerFrame.style.display = 'none';
-        if (gameLobbyHeader) gameLobbyHeader.style.display = 'block';
-        if (gameGrid) gameGrid.style.display = 'grid';
+        const header = container.querySelector('.content-bot-header');
+        const grid = container.querySelector('.game-grid');
+        const playerFrame = container.querySelector('.content-player-frame');
+        if (playerFrame) playerFrame.style.display = 'none';
+        if (header) header.style.display = 'block';
+        if (grid) grid.style.display = 'grid';
       });
     }
+  } catch (error) {
+    console.error('Failed to load content manifest:', error);
+    container.innerHTML = `<div class="content-bot-header"><p>Failed to load content.</p></div>`;
   }
 }
 
-// Launch game in iframe
-function launchGame(gameName) {
-  // Hide game grid and header, show iframe
-  const gameLobbyHeader = document.querySelector('.game-lobby-header');
-  const gameGrid = document.querySelector('.game-grid');
-  const gamePlayerFrame = document.getElementById('gamePlayerFrame');
+// Launch content item in iframe
+function launchContentItem(container, fileName) {
+  const header = container.querySelector('.content-bot-header');
+  const grid = container.querySelector('.game-grid');
+  const playerFrame = container.querySelector('.content-player-frame');
 
-  if (gameLobbyHeader) gameLobbyHeader.style.display = 'none';
-  if (gameGrid) gameGrid.style.display = 'none';
-  if (gamePlayerFrame) gamePlayerFrame.style.display = 'flex';
+  if (header) header.style.display = 'none';
+  if (grid) grid.style.display = 'none';
+  if (playerFrame) playerFrame.style.display = 'flex';
 
-  // Load game in iframe
-  const iframe = document.getElementById('gameIframe');
-  const gameFileMap = {
-    'sliding_puzzle': 'sliding-puzzle.html',
-    'memory_game': 'memory-game.html',
-    'math_challenge': 'math-challenge.html',
-    'poetry_game': 'poetry-game.html'
-  };
+  const basePath = container.dataset.basePath || '/games/';
+  const iframe = container.querySelector('.content-iframe');
+  iframe.src = `${basePath}${fileName}`;
 
-  iframe.src = `/games/${gameFileMap[gameName] || gameName + '.html'}`;
-
-  console.log(`🎮 Launching game: ${gameName}`);
+  console.log(`🎮 Launching: ${basePath}${fileName}`);
 }
 
-// PostMessage bridge: Listen for messages from game iframes
+// PostMessage bridge: Listen for messages from content iframes
 window.addEventListener('message', (event) => {
-  // Security: validate origin (optional, can skip for localhost)
-  // if (event.origin !== window.location.origin) return;
-
   const { type, game, level, stars, moves, timeSeconds } = event.data;
 
   if (type === 'requestGameProgress') {
-    // Game is requesting its progress data - now handled by gameReady event
-    // Just send cached data if available for immediate display
     if (window.__cachedGameProgress && window.__cachedGameProgress[game]) {
-      const iframe = document.getElementById('gameIframe');
+      const iframe = document.querySelector('.content-iframe');
       if (iframe && iframe.contentWindow) {
         iframe.contentWindow.postMessage({
           type: 'loadProgress',
@@ -1227,7 +1220,6 @@ window.addEventListener('message', (event) => {
     }
   }
   else if (type === 'saveGameProgress') {
-    // Game completed a level, save to server
     socket.emit('saveGameProgress', {
       gameName: game,
       level,
@@ -1237,13 +1229,11 @@ window.addEventListener('message', (event) => {
     });
   }
   else if (type === 'gameReady') {
-    // Game loaded and ready, always request fresh progress from server
     console.log(`🎮 Game ready: ${game}, requesting progress...`);
     socket.emit('getGameProgress', { gameName: game });
 
-    // Also send cached data immediately if available (for instant display)
     if (window.__cachedGameProgress && window.__cachedGameProgress[game]) {
-      const iframe = document.getElementById('gameIframe');
+      const iframe = document.querySelector('.content-iframe');
       if (iframe && iframe.contentWindow) {
         iframe.contentWindow.postMessage({
           type: 'loadProgress',
@@ -1258,31 +1248,25 @@ window.addEventListener('message', (event) => {
 socket.on('gameProgress', (data) => {
   const { gameName, stars, unlocked } = data;
 
-  // Cache for iframe to consume
   if (!window.__cachedGameProgress) {
     window.__cachedGameProgress = {};
   }
   window.__cachedGameProgress[gameName] = { stars, unlocked };
 
   // If iframe is active, send immediately
-  const iframe = document.getElementById('gameIframe');
+  const iframe = document.querySelector('.content-iframe');
   if (iframe && iframe.src) {
-    // Convert game name format: sliding_puzzle -> sliding-puzzle
     const gameFileName = gameName.replace(/_/g, '-');
     if (iframe.src.includes(gameFileName)) {
       iframe.contentWindow.postMessage({
         type: 'loadProgress',
         progress: { stars, unlocked }
       }, '*');
-      console.log(`📤 Sent progress to ${gameName} iframe:`, { stars, unlocked });
     }
   }
-
-  console.log('✅ Game progress loaded:', data);
 });
 
 socket.on('gameProgressSaved', (data) => {
   console.log('✅ Game progress saved:', data);
-  // Could show a toast notification here
 });
 

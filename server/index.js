@@ -45,11 +45,7 @@ if (!fs.existsSync(LK_SGL_PATH)) {
     }
   }));
 
-  console.log('🎮 Games available at:');
-  console.log('   - /games/sliding-puzzle.html');
-  console.log('   - /games/memory-game.html');
-  console.log('   - /games/math-challenge.html');
-  console.log('   - /games/poetry-game.html\n');
+  console.log('🎮 Games available at: /games/*\n');
 }
 
 // Get version info from git
@@ -855,175 +851,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Admin: Get special rooms (game-lobby, etc.)
-  socket.on('adminGetSpecialRooms', () => {
-    if (!currentUser || !currentUser.isAdmin) {
-      socket.emit('error', { message: 'Admin access required' });
-      return;
-    }
-
-    // Get special rooms (currently just game-lobby)
-    const specialRoomIds = ['game-lobby'];
-    const rooms = [];
-
-    specialRoomIds.forEach(roomId => {
-      const room = roomDb.findById.get(roomId);
-      if (room) {
-        const members = roomDb.getMembers.all(roomId);
-        rooms.push({
-          ...room,
-          members
-        });
-      }
-    });
-
-    const allUsers = userDb.getAll.all();
-
-    socket.emit('adminSpecialRoomsList', { rooms, allUsers });
-  });
-
-  // Admin: Add user to room
-  socket.on('adminAddUserToRoom', (data) => {
-    if (!currentUser || !currentUser.isAdmin) {
-      socket.emit('error', { message: 'Admin access required' });
-      return;
-    }
-
-    const { roomId, userId } = data;
-    roomDb.addMember.run(roomId, userId);
-
-    const user = userDb.findById.get(userId);
-    socket.emit('adminActionSuccess', {
-      message: `用户 ${user.username} 已添加到房间`
-    });
-
-    // If user is online, send them the room update
-    const targetSocketId = onlineUsers.get(userId);
-    if (targetSocketId) {
-      const targetSocket = io.sockets.sockets.get(targetSocketId);
-      if (targetSocket) {
-        const rooms = roomDb.getUserRooms.all(userId);
-        const roomsWithLastMessage = rooms.map(room => {
-          const lastMessage = messageDb.getLastMessage.get(room.id);
-          const members = roomDb.getMembers.all(room.id);
-          return { ...room, lastMessage, members };
-        });
-        targetSocket.emit('roomList', roomsWithLastMessage);
-      }
-    }
-
-    console.log(`➕ Admin ${currentUser.username} added user ${user.username} to room ${roomId}`);
-  });
-
-  // Admin: Remove user from room
-  socket.on('adminRemoveUserFromRoom', (data) => {
-    if (!currentUser || !currentUser.isAdmin) {
-      socket.emit('error', { message: 'Admin access required' });
-      return;
-    }
-
-    const { roomId, userId } = data;
-    roomDb.removeMember.run(roomId, userId);
-
-    const user = userDb.findById.get(userId);
-    socket.emit('adminActionSuccess', {
-      message: `用户 ${user.username} 已从房间移除`
-    });
-
-    // If user is online, send them the room update
-    const targetSocketId = onlineUsers.get(userId);
-    if (targetSocketId) {
-      const targetSocket = io.sockets.sockets.get(targetSocketId);
-      if (targetSocket) {
-        const rooms = roomDb.getUserRooms.all(userId);
-        const roomsWithLastMessage = rooms.map(room => {
-          const lastMessage = messageDb.getLastMessage.get(room.id);
-          const members = roomDb.getMembers.all(room.id);
-          return { ...room, lastMessage, members };
-        });
-        targetSocket.emit('roomList', roomsWithLastMessage);
-      }
-    }
-
-    console.log(`➖ Admin ${currentUser.username} removed user ${user.username} from room ${roomId}`);
-  });
-
-  // Admin: Toggle room visibility for all non-admin users
-  socket.on('adminToggleRoomVisibility', (data) => {
-    if (!currentUser || !currentUser.isAdmin) {
-      socket.emit('error', { message: 'Admin access required' });
-      return;
-    }
-
-    const { roomId, makeVisible } = data;
-
-    // Get all non-admin users
-    const allUsers = userDb.getAll.all();
-    const nonAdminUsers = allUsers.filter(u => u.is_admin === 0);
-
-    let successCount = 0;
-
-    if (makeVisible) {
-      // Add all non-admin users to the room
-      nonAdminUsers.forEach(user => {
-        roomDb.addMember.run(roomId, user.id);
-
-        // If user is online, send them the room update
-        const targetSocketId = onlineUsers.get(user.id);
-        if (targetSocketId) {
-          const targetSocket = io.sockets.sockets.get(targetSocketId);
-          if (targetSocket) {
-            const rooms = roomDb.getUserRooms.all(user.id);
-            const roomsWithLastMessage = rooms.map(room => {
-              const lastMessage = messageDb.getLastMessage.get(room.id);
-              const members = roomDb.getMembers.all(room.id);
-              return { ...room, lastMessage, members };
-            });
-            targetSocket.emit('roomList', roomsWithLastMessage);
-          }
-        }
-        successCount++;
-      });
-
-      socket.emit('adminActionSuccess', {
-        message: `已将 ${successCount} 名非管理员用户添加到房间`
-      });
-      console.log(`🌐 Admin ${currentUser.username} made room ${roomId} visible to all (${successCount} users)`);
-
-    } else {
-      // Remove all non-admin users from the room
-      nonAdminUsers.forEach(user => {
-        roomDb.removeMember.run(roomId, user.id);
-
-        // If user is online, send them the room update
-        const targetSocketId = onlineUsers.get(user.id);
-        if (targetSocketId) {
-          const targetSocket = io.sockets.sockets.get(targetSocketId);
-          if (targetSocket) {
-            const rooms = roomDb.getUserRooms.all(user.id);
-            const roomsWithLastMessage = rooms.map(room => {
-              const lastMessage = messageDb.getLastMessage.get(room.id);
-              const members = roomDb.getMembers.all(room.id);
-              return { ...room, lastMessage, members };
-            });
-            targetSocket.emit('roomList', roomsWithLastMessage);
-          }
-        }
-        successCount++;
-      });
-
-      socket.emit('adminActionSuccess', {
-        message: `已将 ${successCount} 名非管理员用户从房间移除`
-      });
-      console.log(`🌐 Admin ${currentUser.username} made room ${roomId} invisible to all (${successCount} users)`);
-    }
-
-    // Reload admin panel data
-    setTimeout(() => {
-      socket.emit('reloadSpecialRooms');
-    }, 500);
-  });
-
   // Admin: Get server settings
   socket.on('adminGetServerSettings', () => {
     if (!currentUser || !currentUser.isAdmin) {
@@ -1108,7 +935,28 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Bot: Set metadata (content_url, room_theme)
+  socket.on('botSetMetadata', (data) => {
+    if (!currentUser || !currentUser.isBot) {
+      return;
+    }
+
+    try {
+      const { content_url, room_theme } = data;
+      userDb.updateBotMetadata.run(content_url || null, room_theme || null, currentUser.id);
+      console.log(`🤖 Bot ${currentUser.username} set metadata: content_url=${content_url}, room_theme=${room_theme}`);
+
+      // Notify all online users to refresh room list (so members get updated metadata)
+      io.emit('roomListChanged');
+    } catch (error) {
+      console.error('❌ Failed to set bot metadata:', error);
+      socket.emit('error', { message: 'Failed to set bot metadata' });
+    }
+  });
+
   // Bot: Restore room visibility on startup
+  // Only restore rooms that were auto-hidden by bot disconnect (is_active = -1)
+  // Leave admin-hidden rooms (is_active = 0) untouched
   socket.on('botRestoreRooms', () => {
     if (!currentUser || !currentUser.isBot) {
       return;
@@ -1117,11 +965,15 @@ io.on('connection', (socket) => {
     try {
       const myRooms = roomDb.getRoomsByBotUser.all(currentUser.id);
 
+      let restoredCount = 0;
       myRooms.forEach(room => {
-        roomDb.setRoomActive.run(1, room.id);
+        if (room.is_active === -1) {
+          roomDb.setRoomActive.run(1, room.id);
+          restoredCount++;
+        }
       });
 
-      console.log(`🎮 Bot ${currentUser.username} restored ${myRooms.length} rooms`);
+      console.log(`🎮 Bot ${currentUser.username} restored ${restoredCount}/${myRooms.length} rooms`);
 
       // Notify all online users to refresh room list
       io.emit('roomListChanged');
@@ -1144,8 +996,10 @@ io.on('connection', (socket) => {
 
       nonBotUsers.forEach(user => {
         const room = getOrCreatePrivateRoom(currentUser.id, user.id);
-        // Ensure the room is active (visible)
-        roomDb.setRoomActive.run(1, room.id);
+        // Only set new rooms to active; don't override admin-hidden rooms (is_active=0)
+        if (room.is_active === null || room.is_active === undefined) {
+          roomDb.setRoomActive.run(1, room.id);
+        }
         created++;
       });
 
@@ -1159,7 +1013,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Bot: Hide rooms on shutdown
+  // Bot: Hide rooms on shutdown (only auto-hide active rooms, preserve admin-hidden)
   socket.on('botHideRooms', () => {
     if (!currentUser || !currentUser.isBot) {
       return;
@@ -1167,12 +1021,16 @@ io.on('connection', (socket) => {
 
     try {
       const myRooms = roomDb.getRoomsByBotUser.all(currentUser.id);
+      let hiddenCount = 0;
 
       myRooms.forEach(room => {
-        roomDb.setRoomActive.run(0, room.id);
+        if (room.is_active === 1 || room.is_active === null) {
+          roomDb.setRoomActive.run(-1, room.id);
+          hiddenCount++;
+        }
       });
 
-      console.log(`🎮 Bot ${currentUser.username} hid ${myRooms.length} rooms`);
+      console.log(`🎮 Bot ${currentUser.username} hid ${hiddenCount}/${myRooms.length} rooms`);
 
       // Notify all online users to refresh room list
       io.emit('roomListChanged');
@@ -1185,14 +1043,19 @@ io.on('connection', (socket) => {
   // Disconnect
   socket.on('disconnect', () => {
     if (currentUser) {
-      // If this is a bot, hide all its rooms
+      // If this is a bot, auto-hide its active rooms (is_active=1 -> -1)
+      // Leave admin-hidden rooms (is_active=0) untouched
       if (currentUser.isBot) {
         try {
           const myRooms = roomDb.getRoomsByBotUser.all(currentUser.id);
+          let hiddenCount = 0;
           myRooms.forEach(room => {
-            roomDb.setRoomActive.run(0, room.id);
+            if (room.is_active === 1 || room.is_active === null) {
+              roomDb.setRoomActive.run(-1, room.id);
+              hiddenCount++;
+            }
           });
-          console.log(`🎮 Bot ${currentUser.username} disconnected, hid ${myRooms.length} rooms`);
+          console.log(`🎮 Bot ${currentUser.username} disconnected, auto-hid ${hiddenCount}/${myRooms.length} rooms`);
           io.emit('roomListChanged');
         } catch (error) {
           console.error('❌ Failed to hide bot rooms on disconnect:', error);
