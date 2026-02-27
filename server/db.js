@@ -152,26 +152,6 @@ function initDatabase() {
     `).run('lobby', '大厅', 'group');
   }
 
-  // Create "Game Lobby" room
-  const gameLobby = db.prepare('SELECT id FROM rooms WHERE id = ?').get('game-lobby');
-  if (!gameLobby) {
-    db.prepare(`
-      INSERT INTO rooms (id, name, type) VALUES (?, ?, ?)
-    `).run('game-lobby', '游戏大厅', 'group');
-    console.log('✅ Game Lobby room created');
-
-    // Only add users to game-lobby when first creating the room
-    // After that, admin controls visibility via room_members table
-    const allUsers = db.prepare('SELECT id FROM users').all();
-    const addMemberStmt = db.prepare('INSERT OR IGNORE INTO room_members (room_id, user_id) VALUES (?, ?)');
-    allUsers.forEach(user => {
-      addMemberStmt.run('game-lobby', user.id);
-    });
-    if (allUsers.length > 0) {
-      console.log(`✅ Game Lobby made visible to all ${allUsers.length} users`);
-    }
-  }
-
   // Database migration: Add pinned column to room_members table (if not exists)
   try {
     const tableInfo = db.prepare("PRAGMA table_info(room_members)").all();
@@ -242,6 +222,20 @@ function initDatabase() {
     console.error('⚠️  Database migration warning:', error.message);
   }
 
+  // Database migration: Add is_active column to rooms table (for bot room visibility)
+  try {
+    const roomsTableInfo = db.prepare("PRAGMA table_info(rooms)").all();
+    const hasActiveColumn = roomsTableInfo.some(col => col.name === 'is_active');
+
+    if (!hasActiveColumn) {
+      console.log('🔄 Database migration: Adding is_active column to rooms table...');
+      db.exec('ALTER TABLE rooms ADD COLUMN is_active INTEGER DEFAULT 1');
+      console.log('✅ Migration complete');
+    }
+  } catch (error) {
+    console.error('⚠️  Database migration warning:', error.message);
+  }
+
   // Initialize server settings with defaults
   try {
     db.prepare('INSERT OR IGNORE INTO server_settings (key, value) VALUES (?, ?)').run('registration_enabled', '1');
@@ -305,9 +299,12 @@ const userDb = {
   // Reset failed login attempts on successful login
   resetFailedAttempts: db.prepare('UPDATE users SET failed_login_attempts = 0, last_failed_login = NULL WHERE id = ?'),
 
+  // Update display name
+  updateDisplayName: db.prepare('UPDATE users SET display_name = ? WHERE id = ?'),
+
   // Server settings operations
   getSetting: db.prepare('SELECT value FROM server_settings WHERE key = ?'),
-  updateSetting: db.prepare('UPDATE server_settings SET value = ?, updated_at = CURRENT_TIMESTAMP WHERE key = ?')
+  updateSetting: db.prepare('INSERT OR REPLACE INTO server_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)')
 };
 
 // Room operations
@@ -326,7 +323,7 @@ const roomDb = {
     SELECT r.*, rm.joined_at, rm.pinned
     FROM rooms r
     JOIN room_members rm ON r.id = rm.room_id
-    WHERE rm.user_id = ?
+    WHERE rm.user_id = ? AND (r.is_active IS NULL OR r.is_active = 1)
     ORDER BY
       CASE WHEN r.id = 'lobby' THEN 0 ELSE 1 END,
       rm.pinned DESC,
@@ -370,6 +367,16 @@ const roomDb = {
   // Unpin room
   unpinRoom: db.prepare(`
     UPDATE room_members SET pinned = 0 WHERE room_id = ? AND user_id = ?
+  `),
+
+  // Set room active status (for bot room visibility)
+  setRoomActive: db.prepare('UPDATE rooms SET is_active = ? WHERE id = ?'),
+
+  // Get all rooms for a specific bot user (private chats with the bot)
+  getRoomsByBotUser: db.prepare(`
+    SELECT r.* FROM rooms r
+    JOIN room_members rm ON r.id = rm.room_id
+    WHERE r.type = 'private' AND rm.user_id = ?
   `)
 };
 

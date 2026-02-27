@@ -237,6 +237,13 @@ function connectSocket() {
     }
   });
 
+  // Room list changed (bot online/offline, admin actions, etc.)
+  socket.on('roomListChanged', () => {
+    console.log('📢 Room list changed, refreshing...');
+    // Request updated room list from server
+    socket.emit('getRooms');
+  });
+
   socket.on('message', (message) => {
     if (message.room_id === currentRoom?.id) {
       appendMessage(message);
@@ -463,38 +470,14 @@ function renderUserList() {
       </div>
     `);
 
-  // Check if user has access to game-lobby room
-  const hasGameLobbyAccess = rooms.some(room => room.id === 'game-lobby');
-
-  // Add Game Lobby as a virtual user only if user has access
-  let gameLobbyItem = '';
-  if (hasGameLobbyAccess) {
-    gameLobbyItem = `
-      <div class="user-item game-lobby-user" data-special="game-lobby">
-        <div class="user-item-avatar">🎮</div>
-        <div class="user-item-name">游戏大厅 / Game Lobby</div>
-        <div class="user-item-status online"></div>
-      </div>
-    `;
-  }
-
-  userList.innerHTML = gameLobbyItem + userItems.join('');
+  userList.innerHTML = userItems.join('');
 
   // Bind click events
   document.querySelectorAll('.user-item').forEach(item => {
     item.addEventListener('click', () => {
-      // Check if it's the game lobby virtual user
-      if (item.dataset.special === 'game-lobby') {
-        showGameLobby();
-        // Mobile: Auto-hide sidebar after selecting
-        if (window.innerWidth <= 768) {
-          sidebar.classList.remove('show');
-        }
-      } else {
-        // Regular user: create private chat
-        const userId = parseInt(item.dataset.userId);
-        createPrivateChat(userId);
-      }
+      // Regular user: create private chat
+      const userId = parseInt(item.dataset.userId);
+      createPrivateChat(userId);
     });
   });
 }
@@ -503,7 +486,23 @@ function renderUserList() {
 function selectRoom(room) {
   currentRoom = room;
 
-  // Handle game lobby room differently
+  // Check if this is a private chat with game bot
+  const isGameBotRoom = room && room.type === 'private' &&
+                        room.members && room.members.some(m => m.username === 'game-bot');
+
+  if (isGameBotRoom) {
+    // Show game selection instead of normal chat
+    showGameLobby();
+    // Re-render room list to apply active style
+    renderRoomList();
+    // Mobile: Auto-hide sidebar after selecting room
+    if (window.innerWidth <= 768) {
+      sidebar.classList.remove('show');
+    }
+    return;
+  }
+
+  // Handle old game lobby room (backwards compatibility during migration)
   if (room.id === 'game-lobby') {
     showGameLobby();
     // Re-render room list to apply active style
