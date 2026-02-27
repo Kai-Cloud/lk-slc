@@ -1,61 +1,38 @@
 # 部署指南
 
-本指南以 **Ubuntu/Linux** 部署为主，其他操作系统请参考相应章节调整。
+本指南以 **Ubuntu/Linux** 部署为主，其他平台参考末尾章节。
 
 ## 系统要求
 
-### 硬件要求
+### 软件依赖
 
-根据使用规模选择合适的硬件配置：
+- **Node.js 22.x** (必需): https://nodejs.org/
+- **build-essential + python3** (Ubuntu/Debian 必需，编译 better-sqlite3)
+- **Git** (可选)
 
-| 规模 | CPU | 内存 | 存储 | 网络带宽 |
-|------|-----|------|------|---------|
-| 小型 (1-10人) | 单核 1.0 GHz | 512 MB | 500 MB | 10 Mbps |
-| 中型 (10-50人) | 双核 2.0 GHz | 2 GB | 2 GB | 50 Mbps |
-| 大型 (50-200人) | 四核 2.5 GHz | 4 GB | 10 GB | 100 Mbps |
-
-> **提示**: 启用 GPT-4o Bot 需额外 512 MB 内存。局域网环境通常无需担心带宽问题。
-
-### 支持的操作系统
-
-- **Linux**: Ubuntu 18.04+, Debian 10+, CentOS 7+, RHEL 7+ (推荐)
-- **Windows**: Windows 10/11, Windows Server 2016+
-- **macOS**: macOS 10.15 (Catalina) 或更高
-
-### 网络配置要求
-
-#### 端口要求
+### 端口要求
 
 | 端口 | 协议 | 用途 | 是否必需 |
 |------|------|------|----------|
 | 3030 | TCP | HTTP/WebSocket 服务 | 必需 (局域网) |
 | 63030 | TCP | HTTPS 服务 (Nginx) | 可选 (公网访问) |
 
-#### 防火墙配置
+### 防火墙配置
 
-**Ubuntu/Debian (ufw)**:
+**Ubuntu/Debian**:
 ```bash
-sudo ufw allow 3030/tcp
-sudo ufw reload
+sudo ufw allow 3030/tcp && sudo ufw reload
 ```
 
-**CentOS/RHEL (firewalld)**:
+**CentOS/RHEL**:
 ```bash
-sudo firewall-cmd --permanent --add-port=3030/tcp
-sudo firewall-cmd --reload
+sudo firewall-cmd --permanent --add-port=3030/tcp && sudo firewall-cmd --reload
 ```
 
-**Windows**:
+**Windows** (管理员 PowerShell):
 ```powershell
-# 以管理员身份运行 PowerShell
 netsh advfirewall firewall add rule name="Simple Chat Server" dir=in action=allow protocol=TCP localport=3030
 ```
-
-### 软件依赖
-
-- **Node.js 22.x** (必需): https://nodejs.org/
-- **npm**: 随 Node.js 一起安装
-- **Git** (可选): 用于克隆仓库和版本管理
 
 ---
 
@@ -182,7 +159,9 @@ pm2 show chat-server
 pm2 monit
 ```
 
---- HTTPS 部署（Nginx 反向代理）
+---
+
+## HTTPS 部署（Nginx 反向代理）
 
 如果需要通过 HTTPS 在公网访问聊天服务器，可以使用 Nginx 作为反向代理。以下以 Ubuntu 系统为例，使用 Nginx 监听 **63030 端口（HTTPS）** 并代理到本机 **3030 端口（HTTP）**。
 

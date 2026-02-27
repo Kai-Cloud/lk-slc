@@ -527,38 +527,27 @@ pm2 start chat-server
 **症状**: Bot 启动后显示登录失败或连接超时
 
 **可能原因**:
-1. Bot 账号未在网页端注册
-2. `bots/.env` 配置错误
-3. 服务器 URL 错误（HTTP/HTTPS 不匹配）
+1. `bots/gpt-bot/.env` 配置错误
+2. 服务器 URL 错误（HTTP/HTTPS 不匹配）
 
 **解决方案**:
 
-**1. 确认 Bot 账号已注册**:
+**1. 检查配置文件**:
 
 ```bash
-# 访问聊天应用
-# 浏览器打开: http://localhost:3030
-
-# 使用 Bot 用户名和密码登录一次（会自动注册）
-# 登出
-
-# 然后启动 Bot
-```
-
-**2. 检查配置文件**:
-
-```bash
-cd ~/lk-slc/bots
-cat .env
+cat bots/gpt-bot/.env
 
 # 确认以下配置正确:
 # SERVER_URL=http://localhost:3030  # 本地部署
 # SERVER_URL=https://your-domain.com:63030  # HTTPS 部署
-# BOT_USERNAME=gpt-bot
 # BOT_PASSWORD=your-bot-password
+# FOUNDRY_ENDPOINT=...
+# FOUNDRY_API_KEY=...
 ```
 
-**3. 测试服务器连接**:
+> Bot 用户名由目录名决定（`gpt-bot`），无需在 .env 中配置。首次启动自动注册。
+
+**2. 测试服务器连接**:
 
 ```bash
 # 测试 HTTP 连接
@@ -568,13 +557,11 @@ curl http://localhost:3030
 curl -k https://YOUR_IP:63030
 ```
 
-**4. 查看 Bot 日志**:
+**3. 查看 Bot 日志**:
 
 ```bash
-cd ~/lk-slc/bots
-
 # 直接运行查看详细日志
-node gpt-bot.js
+node bots/gpt-bot/index.js
 
 # 如果使用 PM2
 pm2 logs gpt-bot
@@ -594,10 +581,10 @@ Error: self signed certificate
 
 **解决方案**:
 
-**临时方案（测试环境）**: 在 `bots/.env` 中添加:
+**临时方案（测试环境）**: 在 `bots/gpt-bot/.env` 中设置:
 
 ```env
-NODE_TLS_REJECT_UNAUTHORIZED=0
+REJECT_UNAUTHORIZED=false
 ```
 
 **注意**: 仅用于测试环境，生产环境建议使用 Let's Encrypt 证书。
@@ -608,7 +595,7 @@ NODE_TLS_REJECT_UNAUTHORIZED=0
 # 使用 Let's Encrypt 获取证书
 sudo certbot --nginx -d your-domain.com
 
-# 修改 bots/.env
+# 修改 bots/gpt-bot/.env
 SERVER_URL=https://your-domain.com:63030
 ```
 
