@@ -151,7 +151,7 @@ function registerBotEvents(socket, io, getCurrentUser) {
     try {
       const { content_url, room_theme, avatar } = data;
       userDb.updateBotMetadata.run(content_url || null, room_theme || null, avatar || null, currentUser.id);
-      console.log(`🤖 Bot ${currentUser.username} set metadata: content_url=${content_url}, room_theme=${room_theme}, avatar=${avatar}`);
+      console.log(`Bot ${currentUser.username} set metadata: content_url=${content_url}, room_theme=${room_theme}, avatar=${avatar ? 'set' : 'none'}`);
 
       io.emit('roomListChanged');
     } catch (error) {
