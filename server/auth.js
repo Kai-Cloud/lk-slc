@@ -37,7 +37,24 @@ async function authenticateUser(username, password, isBot = false) {
     if (user) {
       // User exists, check if banned
       if (user.is_banned === 1) {
-        return { success: false, error: 'Your account has been banned. Please contact administrator.' };
+        // Admin users: auto-unban after 5 minutes
+        if (user.is_admin === 1 && user.last_failed_login) {
+          const bannedAt = new Date(user.last_failed_login + 'Z').getTime();
+          const now = Date.now();
+          const fiveMinutes = 5 * 60 * 1000;
+          if (now - bannedAt >= fiveMinutes) {
+            // Unban admin and reset failed attempts
+            userDb.setBanned.run(0, user.id);
+            userDb.resetFailedAttempts.run(user.id);
+            user = userDb.findById.get(user.id);
+            console.log(`🔓 Admin ${username} auto-unbanned after 5-minute cooldown`);
+          } else {
+            const remainingSec = Math.ceil((fiveMinutes - (now - bannedAt)) / 1000);
+            return { success: false, error: `Account temporarily locked. Try again in ${remainingSec} seconds. / 账户暂时锁定，请 ${remainingSec} 秒后再试。` };
+          }
+        } else {
+          return { success: false, error: 'Your account has been banned. Please contact administrator.' };
+        }
       }
 
       // Verify password
@@ -52,6 +69,10 @@ async function authenticateUser(username, password, isBot = false) {
         // Auto-ban if 5 or more consecutive failed attempts
         if (user.failed_login_attempts >= 5) {
           userDb.setBanned.run(1, user.id);
+          if (user.is_admin === 1) {
+            console.log(`🔒 Admin ${username} (ID: ${user.id}) temporarily locked for 5 minutes after ${user.failed_login_attempts} failed attempts`);
+            return { success: false, error: 'Too many failed attempts. Account locked for 5 minutes. / 登录失败次数过多，账户锁定 5 分钟。' };
+          }
           console.log(`🚫 User ${username} (ID: ${user.id}) auto-banned after ${user.failed_login_attempts} failed login attempts`);
           return { success: false, error: 'Your account has been banned due to too many failed login attempts. Please contact administrator.' };
         }
