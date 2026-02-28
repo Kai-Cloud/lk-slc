@@ -311,11 +311,20 @@
     const errorDiv = document.getElementById('error');
     const loadingDiv = document.getElementById('loading');
 
-    // 检查是否有保存的 token
-    const savedToken = localStorage.getItem('chatToken');
-    if (savedToken) {
-      // 尝试自动登录
-      tryAutoLogin(savedToken);
+    // 检查 URL 参数中的 token（供 SLC Pager 等外部 app 跳转使用）
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlToken = urlParams.get('token');
+    if (urlToken) {
+      // 清除 URL 中的 token 参数（避免泄露到浏览器历史记录）
+      window.history.replaceState({}, '', '/');
+      tryAutoLogin(urlToken);
+    } else {
+      // 检查是否有保存的 token
+      const savedToken = localStorage.getItem('chatToken');
+      if (savedToken) {
+        // 尝试自动登录
+        tryAutoLogin(savedToken);
+      }
     }
 
     // 表单提交
