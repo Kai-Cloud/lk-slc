@@ -445,12 +445,14 @@ function renderRoomList() {
     const contentArea = item.querySelector('.room-item-content');
     if (contentArea) {
       contentArea.addEventListener('click', () => {
+        pagerProtectUntil = 0;
         const room = rooms.find(r => r.id === roomId);
         if (room) selectRoom(room);
       });
     } else {
       // 没有 content 区域时（大厅）,整个区域可点击
       item.addEventListener('click', () => {
+        pagerProtectUntil = 0;
         const room = rooms.find(r => r.id === roomId);
         if (room) selectRoom(room);
       });
