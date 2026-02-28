@@ -544,8 +544,10 @@ function selectRoom(room) {
     sidebar.classList.remove('show');
   }
 
-  // Load messages (without immediately clearing unread count)
-  socket.emit('loadMessages', { roomId: room.id, limit: 50, skipClearUnread: true });
+  // Mobile: clear unread on room selection (natural UX on touch devices)
+  // PC: keep unread until user interacts (focus input or click messages)
+  const isMobile = window.innerWidth <= 768;
+  socket.emit('loadMessages', { roomId: room.id, limit: 50, skipClearUnread: !isMobile });
 }
 
 // Clear unread count for current room (when user interacts with content)
