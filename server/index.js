@@ -5,6 +5,7 @@ const path = require('path');
 const { execSync } = require('child_process');
 require('dotenv').config();
 
+const rateLimit = require('express-rate-limit');
 const { db, initDatabase, userDb, roomDb, messageDb, unreadDb, getOrCreatePrivateRoom } = require('./db');
 const { authenticateUser, verifyToken, changePassword } = require('./auth');
 const { setupGameRoutes, registerGameEvents, registerBotEvents, handleBotDisconnect, deleteUserGameData } = require('./game');
@@ -23,8 +24,22 @@ const io = new Server(httpServer, {
 });
 
 // Middleware
-app.use(express.json());
+app.use(express.json({ limit: '10kb' }));
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  next();
+});
 app.use(express.static(path.join(__dirname, '..', 'public')));
+
+// Rate limiting for login endpoint (prevent brute-force)
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,  // 15 minutes
+  max: 30,                     // 30 attempts per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many login attempts, please try again later. / 登录尝试次数过多，请稍后再试。' }
+});
 
 // Serve lk-sgl game files
 setupGameRoutes(app);
@@ -846,7 +861,7 @@ io.on('connection', (socket) => {
 });
 
 // HTTP API routes (for Bot or other clients)
-app.post('/api/login', async (req, res) => {
+app.post('/api/login', loginLimiter, async (req, res) => {
   const { username, password, isBot } = req.body;
 
   // Validate required parameters
