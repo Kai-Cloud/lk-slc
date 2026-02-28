@@ -866,6 +866,33 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
+// Verify token & return current user info
+app.get('/api/me', (req, res) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader ? authHeader.replace('Bearer ', '') : '';
+  const user = verifyToken(token);
+
+  if (!user) {
+    return res.status(401).json({ success: false, error: 'Unauthorized' });
+  }
+
+  const dbUser = userDb.findById.get(user.id);
+  if (!dbUser) {
+    return res.status(401).json({ success: false, error: 'User not found' });
+  }
+
+  res.json({
+    success: true,
+    user: {
+      id: dbUser.id,
+      username: dbUser.username,
+      display_name: dbUser.display_name,
+      avatar_url: dbUser.avatar_url,
+      is_admin: dbUser.is_admin,
+    },
+  });
+});
+
 // Change password API
 app.post('/api/change-password', async (req, res) => {
   const authHeader = req.headers.authorization;

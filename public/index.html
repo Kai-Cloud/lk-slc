@@ -381,16 +381,16 @@
       loadingDiv.classList.add('show');
       loginBtn.disabled = true;
 
-      fetch('/api/login', {
-        method: 'POST',
+      fetch('/api/me', {
         headers: {
-          'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         }
       })
       .then(res => res.json())
       .then(data => {
-        if (data.success || data.user) {
+        if (data.success && data.user) {
+          localStorage.setItem('chatToken', token);
+          localStorage.setItem('chatUser', JSON.stringify(data.user));
           window.location.href = '/chat.html';
         } else {
           localStorage.removeItem('chatToken');
