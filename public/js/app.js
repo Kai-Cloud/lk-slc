@@ -90,7 +90,8 @@ if (!token || !savedUser) {
 function initChat() {
   // 从 pager 跳转时，移动端默认展开侧边栏
   const chatParams = new URLSearchParams(window.location.search);
-  if (chatParams.get('via') === 'pager' && window.innerWidth <= 768) {
+  const fromPager = chatParams.get('via') === 'pager' && window.innerWidth <= 768;
+  if (fromPager) {
     sidebar.classList.add('show');
     window.history.replaceState({}, '', '/chat.html');
   }
@@ -150,8 +151,11 @@ function initChat() {
   messageInput.addEventListener('input', autoResizeTextarea);
 
   // 移动端：点击侧边栏外部区域时收起侧边栏
+  // 从 pager 跳转时，15 秒内不自动收起（给用户时间查看房间列表）
+  let pagerProtectUntil = fromPager ? Date.now() + 15000 : 0;
   document.addEventListener('click', (e) => {
     if (window.innerWidth <= 768 && sidebar.classList.contains('show')) {
+      if (Date.now() < pagerProtectUntil) return;
       // 如果点击的不是侧边栏内部，也不是菜单按钮
       if (!sidebar.contains(e.target) && !toggleSidebar.contains(e.target)) {
         sidebar.classList.remove('show');
