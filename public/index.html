@@ -317,7 +317,7 @@
     if (urlToken) {
       // 清除 URL 中的 token 参数（避免泄露到浏览器历史记录）
       window.history.replaceState({}, '', '/');
-      tryAutoLogin(urlToken);
+      tryAutoLogin(urlToken, true);
     } else {
       // 检查是否有保存的 token
       const savedToken = localStorage.getItem('chatToken');
@@ -377,7 +377,7 @@
     });
 
     // 自动登录
-    function tryAutoLogin(token) {
+    function tryAutoLogin(token, fromPager = false) {
       loadingDiv.classList.add('show');
       loginBtn.disabled = true;
 
@@ -391,7 +391,7 @@
         if (data.success && data.user) {
           localStorage.setItem('chatToken', token);
           localStorage.setItem('chatUser', JSON.stringify(data.user));
-          window.location.href = '/chat.html';
+          window.location.href = fromPager ? '/chat.html?via=pager' : '/chat.html';
         } else {
           localStorage.removeItem('chatToken');
           localStorage.removeItem('chatUser');

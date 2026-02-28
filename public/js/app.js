@@ -88,6 +88,13 @@ if (!token || !savedUser) {
 
 // 初始化聊天
 function initChat() {
+  // 从 pager 跳转时，移动端默认展开侧边栏
+  const chatParams = new URLSearchParams(window.location.search);
+  if (chatParams.get('via') === 'pager' && window.innerWidth <= 768) {
+    sidebar.classList.add('show');
+    window.history.replaceState({}, '', '/chat.html');
+  }
+
   // 显示当前用户
   currentUserName.textContent = currentUser.displayName || currentUser.username;
 
