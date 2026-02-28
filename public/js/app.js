@@ -45,6 +45,9 @@ window.addEventListener('languageChange', () => {
 // Initial translation
 translatePage();
 
+// Pager 跳转保护期：保护期内不自动收起侧边栏
+let pagerProtectUntil = 0;
+
 // DOM 元素
 const messageList = document.getElementById('messageList');
 const messageInput = document.getElementById('messageInput');
@@ -152,7 +155,7 @@ function initChat() {
 
   // 移动端：点击侧边栏外部区域时收起侧边栏
   // 从 pager 跳转时，15 秒内不自动收起（给用户时间查看房间列表）
-  let pagerProtectUntil = fromPager ? Date.now() + 15000 : 0;
+  pagerProtectUntil = fromPager ? Date.now() + 15000 : 0;
   document.addEventListener('click', (e) => {
     if (window.innerWidth <= 768 && sidebar.classList.contains('show')) {
       if (Date.now() < pagerProtectUntil) return;
@@ -512,7 +515,7 @@ function selectRoom(room) {
     // Re-render room list to apply active style
     renderRoomList();
     // Mobile: Auto-hide sidebar after selecting room
-    if (window.innerWidth <= 768) {
+    if (window.innerWidth <= 768 && Date.now() >= pagerProtectUntil) {
       sidebar.classList.remove('show');
     }
     return;
@@ -535,7 +538,7 @@ function selectRoom(room) {
   renderRoomList();
 
   // Mobile: Auto-hide sidebar after selecting room
-  if (window.innerWidth <= 768) {
+  if (window.innerWidth <= 768 && Date.now() >= pagerProtectUntil) {
     sidebar.classList.remove('show');
   }
 
