@@ -1133,3 +1133,157 @@ body {
     height: calc(100vh - 150px);
   }
 }
+
+/* ============================================================ */
+/* Media Attachments & File Upload                               */
+/* ============================================================ */
+
+/* Attach button */
+.btn-attach {
+  width: 45px;
+  height: 45px;
+  border-radius: 50%;
+  border: none;
+  background: #f0f0f0;
+  font-size: 20px;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.2s;
+  flex-shrink: 0;
+}
+.btn-attach:hover {
+  background: #e0e0e0;
+  transform: scale(1.05);
+}
+
+/* Message attachment container */
+.message-attachment {
+  margin-top: 6px;
+  max-width: 100%;
+}
+
+.attachment-image {
+  max-width: 300px;
+  max-height: 300px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  object-fit: contain;
+}
+.attachment-image:hover {
+  opacity: 0.9;
+}
+
+.attachment-video {
+  max-width: 400px;
+  max-height: 300px;
+  border-radius: 12px;
+}
+
+/* Drag and drop feedback */
+.message-list.drag-over {
+  background: #e3f2fd;
+  outline: 2px dashed #667eea;
+  outline-offset: -4px;
+}
+
+/* Upload progress bar */
+.upload-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 20px;
+  background: #f9f9f9;
+  border-top: 1px solid #e0e0e0;
+  font-size: 13px;
+}
+.upload-filename {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #555;
+}
+.upload-bar {
+  flex: 1;
+  height: 6px;
+  background: #e0e0e0;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.upload-bar-fill {
+  height: 100%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 3px;
+  transition: width 0.2s;
+}
+.upload-percent {
+  color: #888;
+  font-size: 12px;
+  min-width: 35px;
+  text-align: right;
+}
+
+/* Lightbox */
+.lightbox {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lightbox-backdrop {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+}
+.lightbox-img {
+  position: relative;
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 8px;
+  z-index: 1;
+}
+.lightbox-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: rgba(255,255,255,0.2);
+  border: none;
+  color: white;
+  font-size: 32px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  cursor: pointer;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lightbox-close:hover {
+  background: rgba(255,255,255,0.3);
+}
+
+/* Hyperlinks in messages */
+.message-bubble a {
+  color: #2196F3;
+  text-decoration: underline;
+  word-break: break-all;
+}
+.message.own .message-bubble a {
+  color: #bbdefb;
+}
+
+/* Mobile responsive for attachments */
+@media (max-width: 768px) {
+  .attachment-image {
+    max-width: 200px;
+    max-height: 200px;
+  }
+  .attachment-video {
+    max-width: 250px;
+    max-height: 200px;
+  }
+}

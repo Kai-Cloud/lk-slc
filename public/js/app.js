@@ -115,6 +115,57 @@ function initChat() {
   messageInput.addEventListener('keydown', handleMessageInputKeydown);
   messageInput.addEventListener('input', handleMessageInput);
 
+  // 文件上传: 附件按钮 + 隐藏 file input
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = 'image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm';
+  fileInput.style.display = 'none';
+  document.body.appendChild(fileInput);
+
+  const attachBtn = document.createElement('button');
+  attachBtn.className = 'btn-attach';
+  attachBtn.title = '发送图片/视频';
+  attachBtn.innerHTML = '&#x1F4CE;'; // 📎
+  inputArea.insertBefore(attachBtn, sendBtn);
+
+  attachBtn.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files.length > 0) {
+      uploadFile(fileInput.files[0]);
+      fileInput.value = '';
+    }
+  });
+
+  // 拖拽上传
+  messageList.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    messageList.classList.add('drag-over');
+  });
+  messageList.addEventListener('dragleave', () => {
+    messageList.classList.remove('drag-over');
+  });
+  messageList.addEventListener('drop', (e) => {
+    e.preventDefault();
+    messageList.classList.remove('drag-over');
+    if (e.dataTransfer.files.length > 0) {
+      uploadFile(e.dataTransfer.files[0]);
+    }
+  });
+
+  // 粘贴上传 (Ctrl+V 图片)
+  messageInput.addEventListener('paste', (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (file) uploadFile(file);
+        return;
+      }
+    }
+  });
+
   // 清除未读：当用户聚焦输入框时
   messageInput.addEventListener('focus', clearCurrentRoomUnread);
 
@@ -264,7 +315,7 @@ function connectSocket() {
     }
 
     // 更新房间预览
-    updateRoomPreview(message.room_id, message.text, message.username, message.display_name);
+    updateRoomPreview(message.room_id, message.text, message.username, message.display_name, message.attachment_type);
   });
 
   socket.on('messages', (data) => {
@@ -428,7 +479,7 @@ function renderRoomList() {
         <div class="room-item-content">
           <div class="room-item-title">${pinIcon}${escapeHtml(displayName)}</div>
           <div class="room-item-preview" id="room-preview-${room.id}">
-            ${isContentBot ? (botMember.display_name || botMember.username) : (room.lastMessage ? escapeHtml(room.lastMessage.text.substring(0, 30)) : i18n.t('room.startChat'))}
+            ${isContentBot ? (botMember.display_name || botMember.username) : (room.lastMessage ? escapeHtml(getRoomPreviewText(room.lastMessage)) : i18n.t('room.startChat'))}
           </div>
         </div>
         ${hasUnread ? `<div class="unread-badge">${unreadCount > 99 ? '99+' : unreadCount}</div>` : ''}
@@ -607,6 +658,11 @@ function sendMessage() {
 
   if (!text || !currentRoom) return;
 
+  if (text.length > 5000) {
+    alert('消息过长，最多 5000 字。/ Message too long. Maximum 5000 characters.');
+    return;
+  }
+
   socket.emit('sendMessage', {
     roomId: currentRoom.id,
     text
@@ -638,8 +694,33 @@ function appendMessage(message) {
   const messageDiv = document.createElement('div');
   messageDiv.className = `message ${isOwn ? 'own' : ''} ${isBot ? 'bot' : ''}`;
 
-  // Process message text: escape HTML first, then highlight mentions
-  const processedText = highlightMentions(escapeHtml(message.text));
+  // Process message text: escape HTML → highlight mentions → linkify URLs
+  let processedText = '';
+  if (message.text) {
+    processedText = linkifyUrls(highlightMentions(escapeHtml(message.text)));
+  }
+
+  // Build attachment HTML
+  let attachmentHtml = '';
+  if (message.attachment_url) {
+    if (message.attachment_type && message.attachment_type.startsWith('image/')) {
+      attachmentHtml = `
+        <div class="message-attachment">
+          <img src="${escapeHtml(message.attachment_url)}"
+               alt="${escapeHtml(message.attachment_name || 'image')}"
+               class="attachment-image"
+               loading="lazy"
+               onclick="openLightbox(this.src)">
+        </div>`;
+    } else if (message.attachment_type && message.attachment_type.startsWith('video/')) {
+      attachmentHtml = `
+        <div class="message-attachment">
+          <video controls preload="metadata" class="attachment-video">
+            <source src="${escapeHtml(message.attachment_url)}" type="${escapeHtml(message.attachment_type)}">
+          </video>
+        </div>`;
+    }
+  }
 
   messageDiv.innerHTML = `
     <div class="message-avatar">${avatarEmoji}</div>
@@ -650,7 +731,8 @@ function appendMessage(message) {
           <span class="message-time">${formatTime(message.created_at)}</span>
         </div>
       ` : ''}
-      <div class="message-bubble">${processedText}</div>
+      ${processedText ? `<div class="message-bubble">${processedText}</div>` : ''}
+      ${attachmentHtml}
       ${isOwn ? `
         <div class="message-header">
           <span class="message-time">${formatTime(message.created_at)}</span>
@@ -667,22 +749,45 @@ function appendMessage(message) {
   scrollToBottom();
 }
 
+// 获取房间预览文字（处理附件类型）
+function getRoomPreviewText(lastMessage) {
+  if (!lastMessage) return '';
+  let text = lastMessage.text || '';
+  if (lastMessage.attachment_type) {
+    if (lastMessage.attachment_type.startsWith('image/')) {
+      text = '[图片]' + (lastMessage.text ? ' ' + lastMessage.text : '');
+    } else if (lastMessage.attachment_type.startsWith('video/')) {
+      text = '[视频]' + (lastMessage.text ? ' ' + lastMessage.text : '');
+    }
+  }
+  return text.substring(0, 30);
+}
+
 // 更新房间预览
-function updateRoomPreview(roomId, text, username, displayName) {
+function updateRoomPreview(roomId, text, username, displayName, attachmentType) {
   // 更新 rooms 数组中的 lastMessage
   const room = rooms.find(r => r.id === roomId);
   if (room) {
     room.lastMessage = {
       text: text,
       username: username,
-      display_name: displayName
+      display_name: displayName,
+      attachment_type: attachmentType
     };
   }
 
   // 更新 DOM 中的预览元素
   const previewEl = document.getElementById(`room-preview-${roomId}`);
   if (previewEl) {
-    previewEl.textContent = text.substring(0, 30) + (text.length > 30 ? '...' : '');
+    let previewText = text || '';
+    if (attachmentType) {
+      if (attachmentType.startsWith('image/')) {
+        previewText = '[图片]' + (text ? ' ' + text : '');
+      } else if (attachmentType.startsWith('video/')) {
+        previewText = '[视频]' + (text ? ' ' + text : '');
+      }
+    }
+    previewEl.textContent = previewText.substring(0, 30) + (previewText.length > 30 ? '...' : '');
   }
 }
 
@@ -801,6 +906,109 @@ function escapeRegex(text) {
 function highlightMentions(text) {
   // Match @username pattern (username can contain letters, numbers, hyphens, underscores, and Chinese characters)
   return text.replace(/@([\w\u4e00-\u9fa5_-]+)/g, '<span class="mention">@$1</span>');
+}
+
+// Auto-detect URLs and make them clickable (call AFTER escapeHtml)
+function linkifyUrls(text) {
+  return text.replace(/(https?:\/\/[^\s<>"']+)/gi,
+    url => `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`);
+}
+
+// File upload with progress
+function uploadFile(file) {
+  if (!currentRoom) return;
+
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'video/mp4', 'video/webm'];
+  if (!allowedTypes.includes(file.type)) {
+    alert('不支持的文件类型。支持: jpg, png, gif, webp, mp4, webm');
+    return;
+  }
+  if (file.size > 100 * 1024 * 1024) {
+    alert('文件过大，最大 100MB。');
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('roomId', currentRoom.id);
+  const text = messageInput.value.trim();
+  if (text) formData.append('text', text);
+
+  const progressDiv = showUploadProgress(file.name);
+
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', '/api/upload');
+  xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+  xhr.upload.addEventListener('progress', (e) => {
+    if (e.lengthComputable) {
+      const pct = Math.round((e.loaded / e.total) * 100);
+      updateUploadProgress(progressDiv, pct);
+    }
+  });
+
+  xhr.addEventListener('load', () => {
+    removeUploadProgress(progressDiv);
+    if (xhr.status === 200) {
+      messageInput.value = '';
+      autoResizeTextarea();
+    } else {
+      try {
+        const err = JSON.parse(xhr.responseText);
+        alert('上传失败: ' + (err.error || '未知错误'));
+      } catch {
+        alert('上传失败');
+      }
+    }
+  });
+
+  xhr.addEventListener('error', () => {
+    removeUploadProgress(progressDiv);
+    alert('上传失败: 网络错误');
+  });
+
+  xhr.send(formData);
+}
+
+function showUploadProgress(fileName) {
+  const div = document.createElement('div');
+  div.className = 'upload-progress';
+  div.innerHTML = `
+    <span class="upload-filename">${escapeHtml(fileName)}</span>
+    <div class="upload-bar"><div class="upload-bar-fill" style="width: 0%"></div></div>
+    <span class="upload-percent">0%</span>
+  `;
+  inputArea.parentElement.insertBefore(div, inputArea);
+  return div;
+}
+
+function updateUploadProgress(div, pct) {
+  div.querySelector('.upload-bar-fill').style.width = pct + '%';
+  div.querySelector('.upload-percent').textContent = pct + '%';
+}
+
+function removeUploadProgress(div) {
+  if (div && div.parentElement) div.parentElement.removeChild(div);
+}
+
+// Lightbox for full-size image viewing
+function openLightbox(src) {
+  const lightbox = document.createElement('div');
+  lightbox.className = 'lightbox';
+  lightbox.innerHTML = `
+    <div class="lightbox-backdrop"></div>
+    <img src="${escapeHtml(src)}" class="lightbox-img">
+    <button class="lightbox-close">&times;</button>
+  `;
+  document.body.appendChild(lightbox);
+
+  const close = () => lightbox.remove();
+  lightbox.querySelector('.lightbox-backdrop').addEventListener('click', close);
+  lightbox.querySelector('.lightbox-close').addEventListener('click', close);
+  const escHandler = (e) => {
+    if (e.key === 'Escape') { close(); document.removeEventListener('keydown', escHandler); }
+  };
+  document.addEventListener('keydown', escHandler);
 }
 
 function formatTime(timestamp) {

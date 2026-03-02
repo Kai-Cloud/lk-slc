@@ -264,6 +264,23 @@ function initDatabase() {
     console.error('⚠️  Server settings initialization warning:', error.message);
   }
 
+  // Database migration: Add attachment columns to messages table
+  try {
+    const messagesTableInfo = db.prepare("PRAGMA table_info(messages)").all();
+    const hasAttachmentUrl = messagesTableInfo.some(col => col.name === 'attachment_url');
+
+    if (!hasAttachmentUrl) {
+      console.log('🔄 Database migration: Adding attachment columns to messages table...');
+      db.exec('ALTER TABLE messages ADD COLUMN attachment_url TEXT');
+      db.exec('ALTER TABLE messages ADD COLUMN attachment_type TEXT');
+      db.exec('ALTER TABLE messages ADD COLUMN attachment_name TEXT');
+      db.exec('ALTER TABLE messages ADD COLUMN attachment_size INTEGER');
+      console.log('✅ Migration complete');
+    }
+  } catch (error) {
+    console.error('⚠️  Database migration warning:', error.message);
+  }
+
   console.log('✅ Database initialized:', dbPath);
 }
 
@@ -410,6 +427,12 @@ const messageDb = {
   create: db.prepare(`
     INSERT INTO messages (room_id, user_id, text)
     VALUES (?, ?, ?)
+  `),
+
+  // Create message with attachment
+  createWithAttachment: db.prepare(`
+    INSERT INTO messages (room_id, user_id, text, attachment_url, attachment_type, attachment_name, attachment_size)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `),
 
   // Get room messages (most recent N messages)

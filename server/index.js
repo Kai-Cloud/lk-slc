@@ -2,10 +2,13 @@ const express = require('express');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
 const { execSync } = require('child_process');
 require('dotenv').config();
 
 const rateLimit = require('express-rate-limit');
+const multer = require('multer');
 const { db, initDatabase, userDb, roomDb, messageDb, unreadDb, getOrCreatePrivateRoom } = require('./db');
 const { authenticateUser, verifyToken, changePassword } = require('./auth');
 const { setupGameRoutes, registerGameEvents, registerBotEvents, handleBotDisconnect, deleteUserGameData } = require('./game');
@@ -31,6 +34,50 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.static(path.join(__dirname, '..', 'public')));
+
+// Ensure uploads directory exists
+const uploadsDir = path.join(__dirname, '..', 'data', 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Configure multer for file uploads
+const ALLOWED_MIME_TYPES = {
+  'image/jpeg': ['.jpg', '.jpeg'],
+  'image/png': ['.png'],
+  'image/gif': ['.gif'],
+  'image/webp': ['.webp'],
+  'video/mp4': ['.mp4'],
+  'video/webm': ['.webm'],
+};
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadsDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, crypto.randomUUID() + ext);
+  }
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB
+  fileFilter: (req, file, cb) => {
+    if (ALLOWED_MIME_TYPES[file.mimetype]) {
+      cb(null, true);
+    } else {
+      cb(new Error('Unsupported file type. Allowed: jpg, png, gif, webp, mp4, webm'));
+    }
+  }
+});
+
+// Serve uploaded files with caching
+app.use('/uploads', express.static(uploadsDir, {
+  maxAge: '7d',
+  setHeaders: (res) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+  }
+}));
 
 // Rate limiting for login endpoint (prevent brute-force)
 const loginLimiter = rateLimit({
@@ -281,6 +328,11 @@ io.on('connection', (socket) => {
     const { roomId, text } = data;
 
     if (!text || text.trim() === '') {
+      return;
+    }
+
+    if (text.length > 5000) {
+      socket.emit('error', { message: 'Message too long. Maximum 5000 characters. / 消息过长，最多 5000 字。' });
       return;
     }
 
@@ -1014,6 +1066,107 @@ app.get('/api/unread', (req, res) => {
   });
 
   res.json({ total, rooms });
+});
+
+// File upload endpoint
+app.post('/api/upload', (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader ? authHeader.replace('Bearer ', '') : '';
+  const user = verifyToken(token);
+  if (!user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  req.uploadUser = user;
+  next();
+}, upload.single('file'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded' });
+  }
+
+  const { roomId, text } = req.body;
+  if (!roomId) {
+    fs.unlinkSync(req.file.path);
+    return res.status(400).json({ error: 'roomId is required' });
+  }
+
+  const user = req.uploadUser;
+  const room = roomDb.findById.get(roomId);
+  if (!room) {
+    fs.unlinkSync(req.file.path);
+    return res.status(404).json({ error: 'Room not found' });
+  }
+
+  // Double-validate: extension must match MIME type
+  const ext = path.extname(req.file.originalname).toLowerCase();
+  const allowedExts = ALLOWED_MIME_TYPES[req.file.mimetype] || [];
+  if (!allowedExts.includes(ext)) {
+    fs.unlinkSync(req.file.path);
+    return res.status(400).json({ error: 'File extension does not match MIME type' });
+  }
+
+  const attachmentUrl = `/uploads/${req.file.filename}`;
+  const attachmentType = req.file.mimetype;
+  const attachmentName = req.file.originalname;
+  const attachmentSize = req.file.size;
+  const messageText = (text && text.trim()) ? text.trim() : '';
+
+  // Save message with attachment
+  const result = messageDb.createWithAttachment.run(
+    roomId, user.id, messageText,
+    attachmentUrl, attachmentType, attachmentName, attachmentSize
+  );
+  const messageId = result.lastInsertRowid;
+
+  const message = {
+    id: messageId,
+    room_id: roomId,
+    user_id: user.id,
+    username: user.username,
+    display_name: user.displayName,
+    is_bot: user.isBot ? 1 : 0,
+    text: messageText,
+    attachment_url: attachmentUrl,
+    attachment_type: attachmentType,
+    attachment_name: attachmentName,
+    attachment_size: attachmentSize,
+    created_at: new Date().toISOString()
+  };
+
+  // Broadcast via Socket.io
+  io.to(roomId).emit('message', message);
+
+  // Increment unread for room members (same logic as sendMessage)
+  const members = roomDb.getMembers.all(roomId);
+  members.forEach(member => {
+    if (member.id !== user.id) {
+      unreadDb.incrementUnreadCount.run(member.id, roomId, messageId);
+      const targetSocketId = onlineUsers.get(member.id);
+      if (targetSocketId) {
+        const unreadResult = unreadDb.getRoomUnreadCount.get(member.id, roomId);
+        const newCount = unreadResult ? unreadResult.count : 1;
+        io.to(targetSocketId).emit('unreadCountUpdate', { roomId, count: newCount });
+        const totalUnread = unreadDb.getTotalUnreadCount.get(member.id);
+        io.to(targetSocketId).emit('totalUnreadCount', { total: totalUnread?.total || 0 });
+      }
+    }
+  });
+
+  console.log(`📎 [${room.name}] ${user.username}: uploaded ${attachmentName} (${(attachmentSize / 1024).toFixed(0)}KB)`);
+  res.json({ success: true, message });
+});
+
+// Multer error handler
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({ error: 'File too large. Maximum size is 100MB. / 文件过大，最大 100MB。' });
+    }
+    return res.status(400).json({ error: err.message });
+  }
+  if (err.message && err.message.includes('Unsupported file type')) {
+    return res.status(400).json({ error: err.message });
+  }
+  next(err);
 });
 
 // Start server
