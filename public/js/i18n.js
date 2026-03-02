@@ -25,7 +25,7 @@ const i18n = {
       'chat.settings': '设置',
       'chat.online': '在线',
       'chat.rooms': '房间',
-      'chat.onlineUsers': '在线用户',
+      'chat.onlineUsers': 'Chat用户',
       'chat.refresh': '刷新',
 
       // Chat page - Main
@@ -109,7 +109,7 @@ const i18n = {
       'chat.settings': 'Settings',
       'chat.online': 'Online',
       'chat.rooms': 'Rooms',
-      'chat.onlineUsers': 'Online Users',
+      'chat.onlineUsers': 'Chat Users',
       'chat.refresh': 'Refresh',
 
       // Chat page - Main

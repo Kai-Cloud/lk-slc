@@ -555,16 +555,25 @@ function renderRoomList() {
 
 // 渲染用户列表
 function renderUserList() {
-  // Add real users
-  const userItems = onlineUsers
-    .filter(u => u.id !== currentUser.id)
-    .map(user => `
-      <div class="user-item" data-user-id="${user.id}">
+  // Filter out current user, then sort: online first, then offline
+  const otherUsers = onlineUsers.filter(u => u.id !== currentUser.id);
+  const sorted = otherUsers.sort((a, b) => {
+    const aOnline = a.isOnline ? 1 : 0;
+    const bOnline = b.isOnline ? 1 : 0;
+    if (aOnline !== bOnline) return bOnline - aOnline; // online first
+    return (a.display_name || a.username).localeCompare(b.display_name || b.username);
+  });
+
+  const userItems = sorted.map(user => {
+    const online = user.isOnline;
+    return `
+      <div class="user-item ${online ? '' : 'offline'}" data-user-id="${user.id}">
         <div class="user-item-avatar">${getUserAvatar(user)}</div>
         <div class="user-item-name">${escapeHtml(user.display_name || user.username)}</div>
-        <div class="user-item-status ${isUserOnline(user) ? 'online' : 'offline'}"></div>
+        <div class="user-item-status ${online ? 'online' : 'offline'}"></div>
       </div>
-    `);
+    `;
+  });
 
   userList.innerHTML = userItems.join('');
 

@@ -317,6 +317,13 @@ const userDb = {
     WHERE datetime(last_seen) > datetime('now', '-5 minutes')
   `),
 
+  // Get all registered users (for chat user list: online + offline)
+  getAllRegistered: db.prepare(`
+    SELECT id, username, display_name, is_bot, is_admin, last_seen, content_url, room_theme, avatar
+    FROM users
+    WHERE is_banned = 0
+  `),
+
   // Set user as admin
   setAdmin: db.prepare('UPDATE users SET is_admin = ? WHERE id = ?'),
 

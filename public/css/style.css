@@ -368,6 +368,10 @@ body {
   background: #999;
 }
 
+.user-item.offline {
+  opacity: 0.55;
+}
+
 /* 主聊天区域 */
 .main-chat {
   flex: 1;

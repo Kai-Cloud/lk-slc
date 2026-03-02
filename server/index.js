@@ -517,7 +517,12 @@ io.on('connection', (socket) => {
 
   // Get online users list
   socket.on('getOnlineUsers', () => {
-    const users = userDb.getOnline.all();
+    const allUsers = userDb.getAllRegistered.all();
+    // Mark each user as online/offline based on active socket connections
+    const users = allUsers.map(u => ({
+      ...u,
+      isOnline: onlineUsers.has(u.id)
+    }));
     socket.emit('onlineUsers', users);
   });
 
