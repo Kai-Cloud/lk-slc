@@ -118,7 +118,7 @@ function initChat() {
   // 文件上传: 附件按钮 + 隐藏 file input
   const fileInput = document.createElement('input');
   fileInput.type = 'file';
-  fileInput.accept = 'image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm';
+  fileInput.accept = 'image/*,video/*';
   fileInput.style.display = 'none';
   document.body.appendChild(fileInput);
 
@@ -918,9 +918,9 @@ function linkifyUrls(text) {
 function uploadFile(file) {
   if (!currentRoom) return;
 
-  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'video/mp4', 'video/webm'];
-  if (!allowedTypes.includes(file.type)) {
-    alert('不支持的文件类型。支持: jpg, png, gif, webp, mp4, webm');
+  // Client-side: allow any image/video; server does strict MIME+ext validation
+  if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
+    alert('不支持的文件类型。请选择图片或视频文件。');
     return;
   }
   if (file.size > 100 * 1024 * 1024) {

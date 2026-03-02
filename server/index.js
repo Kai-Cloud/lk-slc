@@ -51,10 +51,23 @@ const ALLOWED_MIME_TYPES = {
   'video/webm': ['.webm'],
 };
 
+// Map MIME type to default extension (for mobile uploads with missing/wrong ext)
+const MIME_TO_EXT = {
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/gif': '.gif',
+  'image/webp': '.webp',
+  'video/mp4': '.mp4',
+  'video/webm': '.webm',
+};
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadsDir),
   filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
+    // Use MIME-based extension when original is missing or not in allowed list
+    const origExt = path.extname(file.originalname).toLowerCase();
+    const allowedExts = ALLOWED_MIME_TYPES[file.mimetype] || [];
+    const ext = allowedExts.includes(origExt) ? origExt : (MIME_TO_EXT[file.mimetype] || origExt);
     cb(null, crypto.randomUUID() + ext);
   }
 });
@@ -1096,12 +1109,10 @@ app.post('/api/upload', (req, res, next) => {
     return res.status(404).json({ error: 'Room not found' });
   }
 
-  // Double-validate: extension must match MIME type
-  const ext = path.extname(req.file.originalname).toLowerCase();
-  const allowedExts = ALLOWED_MIME_TYPES[req.file.mimetype] || [];
-  if (!allowedExts.includes(ext)) {
+  // Validate MIME type is in allowed list (extension already corrected in filename handler)
+  if (!ALLOWED_MIME_TYPES[req.file.mimetype]) {
     fs.unlinkSync(req.file.path);
-    return res.status(400).json({ error: 'File extension does not match MIME type' });
+    return res.status(400).json({ error: 'Unsupported file type' });
   }
 
   const attachmentUrl = `/uploads/${req.file.filename}`;
