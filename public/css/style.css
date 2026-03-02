@@ -1287,3 +1287,116 @@ body {
     max-height: 200px;
   }
 }
+
+/* Message delete button */
+.message-delete-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+  opacity: 0;
+  transition: opacity 0.2s;
+  border-radius: 4px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+.message-delete-btn:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.message:hover .message-delete-btn {
+  opacity: 0.5;
+}
+
+.message:hover .message-delete-btn:hover {
+  opacity: 1;
+}
+
+/* Mobile: always show delete button with low opacity */
+@media (max-width: 768px) {
+  .message-delete-btn {
+    opacity: 0.4;
+    font-size: 11px;
+  }
+}
+
+/* Clear chat button in header */
+#clearChatBtn {
+  font-size: 18px;
+}
+
+/* Generic file attachment */
+.attachment-file {
+  margin-top: 4px;
+}
+
+.file-download-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: #f0f2f5;
+  border-radius: 10px;
+  text-decoration: none;
+  color: #333;
+  transition: background 0.2s;
+  max-width: 300px;
+}
+
+.file-download-link:hover {
+  background: #e4e6e9;
+}
+
+.message.own .file-download-link {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.message.own .file-download-link:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.message.own .file-download-link {
+  color: #fff;
+}
+
+.file-icon {
+  font-size: 28px;
+  flex-shrink: 0;
+}
+
+.file-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.file-name {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-size {
+  font-size: 11px;
+  opacity: 0.7;
+  margin-top: 2px;
+}
+
+@media (max-width: 768px) {
+  .file-download-link {
+    max-width: 220px;
+    padding: 8px 10px;
+  }
+
+  .file-icon {
+    font-size: 24px;
+  }
+
+  .file-name {
+    font-size: 12px;
+  }
+}

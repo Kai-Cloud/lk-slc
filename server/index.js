@@ -42,16 +42,7 @@ if (!fs.existsSync(uploadsDir)) {
 }
 
 // Configure multer for file uploads
-const ALLOWED_MIME_TYPES = {
-  'image/jpeg': ['.jpg', '.jpeg'],
-  'image/png': ['.png'],
-  'image/gif': ['.gif'],
-  'image/webp': ['.webp'],
-  'video/mp4': ['.mp4'],
-  'video/webm': ['.webm'],
-};
-
-// Map MIME type to default extension (for mobile uploads with missing/wrong ext)
+// Known MIME-to-extension mapping (for mobile uploads with missing/wrong ext)
 const MIME_TO_EXT = {
   'image/jpeg': '.jpg',
   'image/png': '.png',
@@ -59,15 +50,17 @@ const MIME_TO_EXT = {
   'image/webp': '.webp',
   'video/mp4': '.mp4',
   'video/webm': '.webm',
+  'application/pdf': '.pdf',
+  'application/zip': '.zip',
+  'application/vnd.android.package-archive': '.apk',
 };
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadsDir),
   filename: (req, file, cb) => {
-    // Use MIME-based extension when original is missing or not in allowed list
+    // Use known MIME-based extension when original is missing, otherwise keep original ext
     const origExt = path.extname(file.originalname).toLowerCase();
-    const allowedExts = ALLOWED_MIME_TYPES[file.mimetype] || [];
-    const ext = allowedExts.includes(origExt) ? origExt : (MIME_TO_EXT[file.mimetype] || origExt);
+    const ext = origExt || MIME_TO_EXT[file.mimetype] || '';
     cb(null, crypto.randomUUID() + ext);
   }
 });
@@ -75,13 +68,6 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage,
   limits: { fileSize: 100 * 1024 * 1024 }, // 100MB
-  fileFilter: (req, file, cb) => {
-    if (ALLOWED_MIME_TYPES[file.mimetype]) {
-      cb(null, true);
-    } else {
-      cb(new Error('Unsupported file type. Allowed: jpg, png, gif, webp, mp4, webm'));
-    }
-  }
 });
 
 // Serve uploaded files with caching
@@ -902,6 +888,115 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Delete single message
+  socket.on('deleteMessage', (data) => {
+    if (!currentUser) {
+      socket.emit('error', { message: 'Please login first' });
+      return;
+    }
+
+    const { messageId } = data;
+    if (!messageId) return;
+
+    // Fetch message to verify it exists
+    const message = messageDb.getById.get(messageId);
+    if (!message) {
+      socket.emit('error', { message: 'Message not found' });
+      return;
+    }
+
+    const roomId = message.room_id;
+
+    // Verify user is a member of this room
+    const members = roomDb.getRoomMembers.all(roomId);
+    const isMember = members.some(m => m.user_id === currentUser.id);
+    if (!isMember) {
+      socket.emit('error', { message: 'You are not a member of this room' });
+      return;
+    }
+
+    // Delete attachment file if exists
+    if (message.attachment_url) {
+      const filename = path.basename(message.attachment_url);
+      const filePath = path.join(uploadsDir, filename);
+      fs.unlink(filePath, (err) => {
+        if (err && err.code !== 'ENOENT') {
+          console.error(`⚠️ Failed to delete attachment: ${filePath}`, err.message);
+        }
+      });
+    }
+
+    // Delete from database
+    messageDb.deleteById.run(messageId);
+
+    // Broadcast to room
+    io.to(roomId).emit('messageDeleted', { messageId, roomId });
+
+    console.log(`🗑️ ${currentUser.username} deleted message #${messageId} in room ${roomId}`);
+  });
+
+  // Clear all messages in a private room
+  socket.on('clearRoomMessages', (data) => {
+    if (!currentUser) {
+      socket.emit('error', { message: 'Please login first' });
+      return;
+    }
+
+    const { roomId } = data;
+    if (!roomId) return;
+
+    const room = roomDb.findById.get(roomId);
+    if (!room) {
+      socket.emit('error', { message: 'Room does not exist' });
+      return;
+    }
+
+    // Only allow clearing private rooms
+    if (room.type !== 'private') {
+      socket.emit('error', { message: 'Can only clear private chat rooms' });
+      return;
+    }
+
+    // Verify user is a member
+    const members = roomDb.getRoomMembers.all(roomId);
+    const isMember = members.some(m => m.user_id === currentUser.id);
+    if (!isMember) {
+      socket.emit('error', { message: 'You are not a member of this room' });
+      return;
+    }
+
+    // Delete all attachment files
+    const attachments = messageDb.getAttachmentsByRoom.all(roomId);
+    attachments.forEach(({ attachment_url }) => {
+      const filename = path.basename(attachment_url);
+      const filePath = path.join(uploadsDir, filename);
+      fs.unlink(filePath, (err) => {
+        if (err && err.code !== 'ENOENT') {
+          console.error(`⚠️ Failed to delete attachment: ${filePath}`, err.message);
+        }
+      });
+    });
+
+    // Delete all messages
+    messageDb.deleteByRoom.run(roomId);
+
+    // Clear unread counts for this room for all members
+    members.forEach(m => {
+      unreadDb.clearUnreadCount.run(m.user_id, roomId);
+      const targetSocketId = onlineUsers.get(m.user_id);
+      if (targetSocketId) {
+        io.to(targetSocketId).emit('unreadCountUpdate', { roomId, count: 0 });
+        const totalUnread = unreadDb.getTotalUnreadCount.get(m.user_id);
+        io.to(targetSocketId).emit('totalUnreadCount', { total: totalUnread?.total || 0 });
+      }
+    });
+
+    // Broadcast to room
+    io.to(roomId).emit('roomMessagesCleared', { roomId });
+
+    console.log(`🧹 ${currentUser.username} cleared all messages in private room ${roomId}`);
+  });
+
   // Disconnect
   socket.on('disconnect', () => {
     if (currentUser) {
@@ -1083,13 +1178,16 @@ app.get('/api/unread', (req, res) => {
 
 // File upload endpoint
 app.post('/api/upload', (req, res, next) => {
+  console.log('📤 Upload request received from', req.ip);
   const authHeader = req.headers.authorization;
   const token = authHeader ? authHeader.replace('Bearer ', '') : '';
   const user = verifyToken(token);
   if (!user) {
+    console.log('📤 Upload rejected: unauthorized');
     return res.status(401).json({ error: 'Unauthorized' });
   }
   req.uploadUser = user;
+  console.log(`📤 Upload authorized for user: ${user.username}`);
   next();
 }, upload.single('file'), (req, res) => {
   if (!req.file) {
@@ -1107,12 +1205,6 @@ app.post('/api/upload', (req, res, next) => {
   if (!room) {
     fs.unlinkSync(req.file.path);
     return res.status(404).json({ error: 'Room not found' });
-  }
-
-  // Validate MIME type is in allowed list (extension already corrected in filename handler)
-  if (!ALLOWED_MIME_TYPES[req.file.mimetype]) {
-    fs.unlinkSync(req.file.path);
-    return res.status(400).json({ error: 'Unsupported file type' });
   }
 
   const attachmentUrl = `/uploads/${req.file.filename}`;

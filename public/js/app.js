@@ -60,6 +60,7 @@ const roomSubtitle = document.getElementById('roomSubtitle');
 const inputArea = document.getElementById('inputArea');
 const connectionStatus = document.getElementById('connectionStatus');
 const searchBtn = document.getElementById('searchBtn');
+const clearChatBtn = document.getElementById('clearChatBtn');
 const searchBar = document.getElementById('searchBar');
 const searchInput = document.getElementById('searchInput');
 const closeSearch = document.getElementById('closeSearch');
@@ -118,13 +119,12 @@ function initChat() {
   // 文件上传: 附件按钮 + 隐藏 file input
   const fileInput = document.createElement('input');
   fileInput.type = 'file';
-  fileInput.accept = 'image/*,video/*';
   fileInput.style.display = 'none';
   document.body.appendChild(fileInput);
 
   const attachBtn = document.createElement('button');
   attachBtn.className = 'btn-attach';
-  attachBtn.title = '发送图片/视频';
+  attachBtn.title = '发送文件';
   attachBtn.innerHTML = '&#x1F4CE;'; // 📎
   inputArea.insertBefore(attachBtn, sendBtn);
 
@@ -171,6 +171,8 @@ function initChat() {
 
   // 清除未读：当用户点击消息列表时
   messageList.addEventListener('click', clearCurrentRoomUnread);
+
+  clearChatBtn.addEventListener('click', clearRoomMessages);
 
   searchBtn.addEventListener('click', () => {
     searchBar.classList.toggle('hidden');
@@ -384,6 +386,28 @@ function connectSocket() {
     }
   });
 
+  // Single message deleted
+  socket.on('messageDeleted', (data) => {
+    const { messageId, roomId } = data;
+    // Remove from DOM if in current room
+    if (roomId === currentRoom?.id) {
+      const msgEl = messageList.querySelector(`[data-message-id="${messageId}"]`);
+      if (msgEl) msgEl.remove();
+    }
+    // Update room preview (refresh room list to pick up new lastMessage)
+    socket.emit('getRooms');
+  });
+
+  // All messages cleared in a room
+  socket.on('roomMessagesCleared', (data) => {
+    const { roomId } = data;
+    if (roomId === currentRoom?.id) {
+      messageList.innerHTML = '';
+    }
+    // Update room preview
+    socket.emit('getRooms');
+  });
+
   socket.on('searchResults', (results) => {
     renderSearchResults(results);
   });
@@ -587,6 +611,9 @@ function selectRoom(room) {
   currentRoomName.textContent = room.name;
   roomSubtitle.textContent = room.type === 'private' ? i18n.t('room.privateChat') : i18n.t('chat.rooms');
 
+  // Show clear chat button only for private rooms (not lobby, not content bot)
+  clearChatBtn.style.display = room.type === 'private' ? 'block' : 'none';
+
   // Re-render room list to apply active style
   renderRoomList();
 
@@ -693,6 +720,7 @@ function appendMessage(message) {
 
   const messageDiv = document.createElement('div');
   messageDiv.className = `message ${isOwn ? 'own' : ''} ${isBot ? 'bot' : ''}`;
+  messageDiv.dataset.messageId = message.id;
 
   // Process message text: escape HTML → highlight mentions → linkify URLs
   let processedText = '';
@@ -719,8 +747,26 @@ function appendMessage(message) {
             <source src="${escapeHtml(message.attachment_url)}" type="${escapeHtml(message.attachment_type)}">
           </video>
         </div>`;
+    } else {
+      // Generic file: show as download link
+      const fileName = message.attachment_name || 'file';
+      const fileSize = message.attachment_size ? formatFileSize(message.attachment_size) : '';
+      const fileIcon = getFileIcon(fileName);
+      attachmentHtml = `
+        <div class="message-attachment attachment-file">
+          <a href="${escapeHtml(message.attachment_url)}" download="${escapeHtml(fileName)}" class="file-download-link" target="_blank">
+            <span class="file-icon">${fileIcon}</span>
+            <span class="file-info">
+              <span class="file-name">${escapeHtml(fileName)}</span>
+              ${fileSize ? `<span class="file-size">${fileSize}</span>` : ''}
+            </span>
+          </a>
+        </div>`;
     }
   }
+
+  // Delete button
+  const deleteBtn = `<button class="message-delete-btn" title="删除消息" onclick="deleteMessage(${message.id})">🗑️</button>`;
 
   messageDiv.innerHTML = `
     <div class="message-avatar">${avatarEmoji}</div>
@@ -729,6 +775,7 @@ function appendMessage(message) {
         <div class="message-header">
           <span class="message-sender">${escapeHtml(message.display_name || message.username)}</span>
           <span class="message-time">${formatTime(message.created_at)}</span>
+          ${deleteBtn}
         </div>
       ` : ''}
       ${processedText ? `<div class="message-bubble">${processedText}</div>` : ''}
@@ -736,6 +783,7 @@ function appendMessage(message) {
       ${isOwn ? `
         <div class="message-header">
           <span class="message-time">${formatTime(message.created_at)}</span>
+          ${deleteBtn}
         </div>
       ` : ''}
     </div>
@@ -749,6 +797,21 @@ function appendMessage(message) {
   scrollToBottom();
 }
 
+// Delete a single message
+function deleteMessage(messageId) {
+  if (confirm('确定删除此消息？/ Delete this message?')) {
+    socket.emit('deleteMessage', { messageId });
+  }
+}
+
+// Clear all messages in current private room
+function clearRoomMessages() {
+  if (!currentRoom || currentRoom.type !== 'private') return;
+  if (confirm('确定清空所有聊天记录？此操作不可恢复。\nClear all messages? This cannot be undone.')) {
+    socket.emit('clearRoomMessages', { roomId: currentRoom.id });
+  }
+}
+
 // 获取房间预览文字（处理附件类型）
 function getRoomPreviewText(lastMessage) {
   if (!lastMessage) return '';
@@ -758,6 +821,8 @@ function getRoomPreviewText(lastMessage) {
       text = '[图片]' + (lastMessage.text ? ' ' + lastMessage.text : '');
     } else if (lastMessage.attachment_type.startsWith('video/')) {
       text = '[视频]' + (lastMessage.text ? ' ' + lastMessage.text : '');
+    } else {
+      text = '[文件]' + (lastMessage.text ? ' ' + lastMessage.text : '');
     }
   }
   return text.substring(0, 30);
@@ -785,6 +850,8 @@ function updateRoomPreview(roomId, text, username, displayName, attachmentType) 
         previewText = '[图片]' + (text ? ' ' + text : '');
       } else if (attachmentType.startsWith('video/')) {
         previewText = '[视频]' + (text ? ' ' + text : '');
+      } else {
+        previewText = '[文件]' + (text ? ' ' + text : '');
       }
     }
     previewEl.textContent = previewText.substring(0, 30) + (previewText.length > 30 ? '...' : '');
@@ -902,6 +969,30 @@ function escapeRegex(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+// Format file size for display
+function formatFileSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
+}
+
+// Get file icon emoji based on extension
+function getFileIcon(fileName) {
+  const ext = (fileName || '').split('.').pop().toLowerCase();
+  const iconMap = {
+    pdf: '📄', doc: '📝', docx: '📝', xls: '📊', xlsx: '📊',
+    ppt: '📊', pptx: '📊', txt: '📃', csv: '📊',
+    zip: '📦', rar: '📦', '7z': '📦', tar: '📦', gz: '📦',
+    apk: '📱', apkx: '📱', ipa: '📱',
+    mp3: '🎵', wav: '🎵', flac: '🎵', aac: '🎵', ogg: '🎵',
+    exe: '⚙️', msi: '⚙️', dmg: '⚙️', deb: '⚙️', rpm: '⚙️',
+    js: '💻', py: '💻', java: '💻', cpp: '💻', html: '💻', css: '💻',
+    json: '💻', xml: '💻', yaml: '💻', yml: '💻',
+  };
+  return iconMap[ext] || '📎';
+}
+
 // Highlight @mentions in message text
 function highlightMentions(text) {
   // Match @username pattern (username can contain letters, numbers, hyphens, underscores, and Chinese characters)
@@ -918,13 +1009,8 @@ function linkifyUrls(text) {
 function uploadFile(file) {
   if (!currentRoom) return;
 
-  // Client-side: allow any image/video; server does strict MIME+ext validation
-  if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
-    alert('不支持的文件类型。请选择图片或视频文件。');
-    return;
-  }
   if (file.size > 100 * 1024 * 1024) {
-    alert('文件过大，最大 100MB。');
+    alert('文件过大，最大 100MB。/ File too large. Maximum 100MB.');
     return;
   }
 

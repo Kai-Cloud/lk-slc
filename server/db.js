@@ -482,7 +482,18 @@ const messageDb = {
     FROM messages m
     JOIN users u ON m.user_id = u.id
     WHERE m.id = ?
-  `)
+  `),
+
+  // Delete single message by ID
+  deleteById: db.prepare('DELETE FROM messages WHERE id = ?'),
+
+  // Delete all messages in a room
+  deleteByRoom: db.prepare('DELETE FROM messages WHERE room_id = ?'),
+
+  // Get all attachment URLs for a room (for file cleanup)
+  getAttachmentsByRoom: db.prepare(
+    'SELECT attachment_url FROM messages WHERE room_id = ? AND attachment_url IS NOT NULL'
+  )
 };
 
 // Session operations
